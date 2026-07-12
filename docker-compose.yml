@@ -1,4 +1,6 @@
-version: '3.8'
+# MaintainIQ — Docker Compose (Local Development)
+# For production: use the Dockerfile directly on EC2 + PM2.
+# For local: docker compose up --build
 
 services:
   # MaintainIQ Unified Full-Stack Application
@@ -14,40 +16,55 @@ services:
       - PORT=3000
       - MONGODB_URI=mongodb://mongodb:27017/maintainiq
       - REDIS_URL=redis://redis:6379
-      - SECRET_KEY=maintainiq-local-development-secret-key-2026
-      # Put actual keys in .env and compose will load them, or define them here
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
-      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
-      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
-      - MAIL_USER=${MAIL_USER}
-      - MAIL_PASS=${MAIL_PASS}
+      - JWT_SECRET=${JWT_SECRET:-local-dev-jwt-secret-change-in-production}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME:-}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY:-}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET:-}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
     depends_on:
-      - mongodb
-      - redis
-    volumes:
-      - .:/app
-      - /app/node_modules
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
-  # Local Caching Service
+  # Local Redis Cache
   redis:
-    image: redis:alpine
+    image: redis:7-alpine
     container_name: maintainiq-cache
     ports:
       - "6379:6379"
     volumes:
       - redis-data:/data
-    restart: always
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # Local MongoDB Database
+  # Local MongoDB
   mongodb:
-    image: mongo:latest
+    image: mongo:7
     container_name: maintainiq-db
     ports:
       - "27017:27017"
     volumes:
       - mongo-data:/data/db
-    restart: always
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   redis-data:

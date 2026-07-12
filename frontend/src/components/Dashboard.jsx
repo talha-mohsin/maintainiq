@@ -11,7 +11,7 @@ export default function Dashboard({ stats, loading, onNavigateToTab }) {
   const cards = [
     {
       title: 'Active Assets',
-      value: stats?.activeAssets ?? 0,
+      value: stats?.totalAssets ?? 0,
       hint: 'Tracked equipment',
       icon: Boxes,
       action: () => onNavigateToTab('assets')
@@ -25,7 +25,7 @@ export default function Dashboard({ stats, loading, onNavigateToTab }) {
     },
     {
       title: 'Maintenance Coverage',
-      value: `${stats?.maintenanceCoverage ?? 0}%`,
+      value: `${stats?.totalAssets ? Math.round(((stats?.operational ?? 0) / stats.totalAssets) * 100) : 0}%`,
       hint: 'Scheduled uptime',
       icon: Activity,
       action: () => onNavigateToTab('dashboard')

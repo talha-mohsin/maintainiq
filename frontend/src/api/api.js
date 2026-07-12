@@ -1,15 +1,16 @@
-const API_BASE = '/api';
+/**
+ * MaintainIQ Frontend API Client
+ * Supports VITE_API_URL for split-domain deployments (S3 frontend + EC2 backend)
+ * Falls back to relative /api for unified same-origin deployments
+ */
 
-// Simple store for token in memory as backup to cookies (handles iframe sandboxing restrictions)
-let apiToken = localStorage.getItem('maintainiq_token');
+// Support split-domain deploy: set VITE_API_URL=https://api.yourdomain.com/api at build time
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
-export function setApiToken(token) {
-  apiToken = token;
-  if (token) {
-    localStorage.setItem('maintainiq_token', token);
-  } else {
-    localStorage.removeItem('maintainiq_token');
-  }
+let unauthorizedHandler = null;
+
+export function registerUnauthorizedHandler(handler) {
+  unauthorizedHandler = handler;
 }
 
 async function fetchJson(url, options = {}) {
@@ -20,14 +21,14 @@ async function fetchJson(url, options = {}) {
     headers.set('Content-Type', 'application/json');
   }
 
-  // Token authorization fallback for iframes
-  if (apiToken) {
-    headers.set('Authorization', `Bearer ${apiToken}`);
-  }
-
-  const response = await fetch(url, { ...options, headers });
+  const response = await fetch(url, { ...options, headers, credentials: 'include' });
   
   if (!response.ok) {
+    if (response.status === 401) {
+      if (unauthorizedHandler) {
+        unauthorizedHandler();
+      }
+    }
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
   }
@@ -42,13 +43,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    setApiToken(res.token);
     return res.user;
   },
   
   logout: async () => {
     await fetchJson(`${API_BASE}/auth/logout`, { method: 'POST' });
-    setApiToken(null);
   },
   
   getMe: async () => {
@@ -184,5 +183,7 @@ export const api = {
       body: formData,
     });
     return res;
-  }
+  },
+  
+  onUnauthorized: registerUnauthorizedHandler
 };

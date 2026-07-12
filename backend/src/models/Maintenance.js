@@ -21,5 +21,9 @@ const maintenanceSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
+// Indexes for frequent query patterns
+maintenanceSchema.index({ assetId: 1, completedDate: -1 }); // maintenance history by asset
+maintenanceSchema.index({ issueId: 1 });                    // resolve: find maint by issue
+
 const Maintenance = mongoose.model('Maintenance', maintenanceSchema);
 export default Maintenance;

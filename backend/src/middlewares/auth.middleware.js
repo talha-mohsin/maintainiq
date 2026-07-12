@@ -5,7 +5,22 @@
 
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.SECRET_KEY || process.env.JWT_SECRET || 'maintainiq-secure-fallback-secret-2026';
+/**
+ * JWT_SECRET must be explicitly set in all environments.
+ * The application will fail fast at startup if not configured —
+ * never fall back to a hardcoded secret in source code.
+ */
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SECRET_KEY;
+
+if (!JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('FATAL: JWT_SECRET environment variable is required in production. Server will not start without it.');
+  } else {
+    console.warn('⚠️  JWT_SECRET is not set. Using a temporary development secret. DO NOT use this in production.');
+  }
+}
+
+const EFFECTIVE_SECRET = JWT_SECRET || 'dev-only-secret-not-for-production-use';
 
 export const authenticate = (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -17,7 +32,7 @@ export const authenticate = (req, res, next) => {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, EFFECTIVE_SECRET);
     req.userId = decoded.userId;
     req.userRole = decoded.role;
     req.userName = decoded.name;

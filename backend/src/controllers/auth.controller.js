@@ -7,7 +7,16 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 
-const JWT_SECRET = process.env.SECRET_KEY || process.env.JWT_SECRET || 'maintainiq-secure-fallback-secret-2026';
+const JWT_SECRET = process.env.JWT_SECRET || process.env.SECRET_KEY;
+
+if (!JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('FATAL: JWT_SECRET environment variable is required in production.');
+  }
+  console.warn('⚠️  JWT_SECRET is not set. Using temporary dev-only secret.');
+}
+
+const EFFECTIVE_SECRET = JWT_SECRET || 'dev-only-secret-not-for-production-use';
 
 export const login = async (req, res) => {
   const { email, password } = req.body;
@@ -29,16 +38,18 @@ export const login = async (req, res) => {
     // Create JWT token (valid for 24h)
     const token = jwt.sign(
       { userId: user._id, role: user.role, name: user.name },
-      JWT_SECRET,
+      EFFECTIVE_SECRET,
       { expiresIn: '24h' }
     );
 
-    // Set HTTP-only cookie
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    // Set HTTP-only cookie with hardened settings
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000 // 1 day
+      secure: isProduction,                    // HTTPS only in production
+      sameSite: isProduction ? 'strict' : 'lax', // strict in production (same-domain), lax in dev
+      maxAge: 24 * 60 * 60 * 1000,            // 1 day
     });
 
     // Exclude password from response

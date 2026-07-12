@@ -322,15 +322,26 @@ export const getAssetAIInsights = async (req, res) => {
       return res.status(404).json({ error: 'Asset not found.' });
     }
 
+    const cacheKey = `assets:insights:${assetId}`;
+    const cached = await cacheService.get(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
     const healthScore = await aiService.calculateAssetHealthScore(assetId);
     const riskAssessment = await aiService.calculateRiskAssessment(assetId);
     const preventive = await aiService.getPreventiveRecommendation(assetId);
 
-    res.json({
+    const result = {
       healthScore,
       riskAssessment,
       preventive
-    });
+    };
+
+    // Cache insights for up to 24 hours (will be automatically invalidated early if the asset/issue updates)
+    await cacheService.set(cacheKey, result, 86400); 
+
+    res.json(result);
   } catch (err) {
     console.error("getAssetAIInsights error:", err);
     res.status(500).json({ error: 'Server error generating AI insights' });

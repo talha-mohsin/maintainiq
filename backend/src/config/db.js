@@ -516,8 +516,8 @@ async function seedDatabase() {
           assignedTechnician: 'usr-2',
           assignedTechnicianName: 'Marcus Vance',
           imageEvidence: null,
-          createdAt: new Date('2026-07-01T10:00:00Z'),
-          completedDate: new Date('2026-07-02T14:30:00Z')
+          createdAt: new Date('2026-07-12T10:00:00Z'),
+          completedDate: new Date('2026-07-13T14:30:00Z')
         }
       ];
       await Issue.insertMany(issues);
@@ -581,7 +581,7 @@ async function seedDatabase() {
           action: 'Issue Reported',
           performedBy: 'Receptionist Desk',
           issueId: 'iss-3',
-          timestamp: new Date('2026-07-01T10:00:00Z')
+          timestamp: new Date('2026-07-12T10:00:00Z')
         },
         {
           _id: 'hst-5',
@@ -589,7 +589,7 @@ async function seedDatabase() {
           action: 'Assigned',
           performedBy: 'Sarah Jenkins (Admin)',
           issueId: 'iss-3',
-          timestamp: new Date('2026-07-01T11:00:00Z')
+          timestamp: new Date('2026-07-12T11:00:00Z')
         },
         {
           _id: 'hst-6',
@@ -597,7 +597,7 @@ async function seedDatabase() {
           action: 'Maintenance Completed',
           performedBy: 'Marcus Vance (Technician)',
           issueId: 'iss-3',
-          timestamp: new Date('2026-07-02T14:30:00Z')
+          timestamp: new Date('2026-07-13T14:30:00Z')
         },
         {
           _id: 'hst-7',

@@ -17,5 +17,9 @@ const historySchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
+// Indexes for frequent query patterns
+historySchema.index({ assetId: 1, timestamp: -1 }); // asset history page: sorted by newest
+historySchema.index({ issueId: 1 });                 // issue-specific history lookup
+
 const History = mongoose.model('History', historySchema);
 export default History;

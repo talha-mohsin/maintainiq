@@ -12,7 +12,6 @@ const REDIS_URL = process.env.REDIS_URL;
 
 if (REDIS_URL) {
   try {
-    console.log(`🔌 Initializing Redis Cache with URL: ${REDIS_URL}`);
     redisClient = new Redis(REDIS_URL, {
       maxRetriesPerRequest: 1,
       connectTimeout: 3000,
@@ -111,16 +110,30 @@ export const cacheService = {
   },
 
   /**
-   * Invalidate all keys matching a pattern/prefix
+   * Invalidate all keys matching a pattern/prefix.
+   * Uses SCAN cursor instead of KEYS to avoid O(N) blocking on production Redis.
    * @param {string} prefix 
    */
   async invalidatePattern(prefix) {
     console.log(`🧹 Invalidating cache keys starting with: ${prefix}`);
     if (redisClient && (redisClient.status === 'ready' || redisClient.status === 'connect')) {
       try {
-        const keys = await redisClient.keys(`${prefix}*`);
-        if (keys.length > 0) {
-          await redisClient.del(...keys);
+        // Use SCAN cursor — non-blocking, safe for production Redis clusters
+        let cursor = '0';
+        const keysToDelete = [];
+
+        do {
+          const [nextCursor, keys] = await redisClient.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 100);
+          cursor = nextCursor;
+          keysToDelete.push(...keys);
+        } while (cursor !== '0');
+
+        if (keysToDelete.length > 0) {
+          // Pipeline deletions for efficiency
+          const pipeline = redisClient.pipeline();
+          keysToDelete.forEach(key => pipeline.del(key));
+          await pipeline.exec();
+          console.log(`🧹 Invalidated ${keysToDelete.length} Redis keys for prefix: ${prefix}`);
         }
         return;
       } catch (err) {

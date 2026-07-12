@@ -18,5 +18,8 @@ const userSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
+// Indexes for frequent query patterns
+userSchema.index({ role: 1 });       // getTechnicians: User.find({ role: 'Technician' })
+
 const User = mongoose.model('User', userSchema);
 export default User;

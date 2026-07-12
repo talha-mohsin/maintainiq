@@ -116,6 +116,34 @@ export default function AssetManagement({ currentUser, onNavigateToPublicAsset }
     }
   };
 
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingAsset, setEditingAsset] = useState(null);
+
+  // Edit Asset Submit
+  const handleEditAssetSubmit = async (e) => {
+    e.preventDefault();
+    setFormError('');
+    if (!editingAsset.assetName || !editingAsset.location) {
+      setFormError('Please fill out required fields.');
+      return;
+    }
+    setFormLoading(true);
+    try {
+      await api.updateAsset(editingAsset.id, editingAsset);
+      setShowEditModal(false);
+      setEditingAsset(null);
+      // Reload details if it's the currently selected asset
+      if (selectedAsset?.id === editingAsset.id) {
+        handleSelectAsset({...selectedAsset, ...editingAsset});
+      }
+      loadData();
+    } catch (err) {
+      setFormError(err.message || 'Failed to update asset.');
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
   // Delete Asset
   const handleDeleteAsset = async (assetId) => {
     if (!window.confirm('Are you absolutely sure you want to delete this asset? This will irreversibly erase its entire history, QR label records, and associated maintenance data.')) {
@@ -335,14 +363,26 @@ export default function AssetManagement({ currentUser, onNavigateToPublicAsset }
                               <Eye size={15} />
                             </button>
                             {currentUser.role === 'Admin' && (
-                              <button
-                                id={`delete-asset-${asset.assetCode}`}
-                                title="Remove asset"
-                                onClick={() => handleDeleteAsset(asset.id)}
-                                className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
-                              >
-                                <Trash2 size={15} />
-                              </button>
+                              <>
+                                <button
+                                  title="Edit asset"
+                                  onClick={() => {
+                                    setEditingAsset(asset);
+                                    setShowEditModal(true);
+                                  }}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:bg-teal-50 hover:text-teal-600 transition-colors"
+                                >
+                                  <Edit size={15} />
+                                </button>
+                                <button
+                                  id={`delete-asset-${asset.assetCode}`}
+                                  title="Remove asset"
+                                  onClick={() => handleDeleteAsset(asset.id)}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-colors"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </>
                             )}
                           </div>
                         </td>
@@ -727,6 +767,147 @@ export default function AssetManagement({ currentUser, onNavigateToPublicAsset }
                   className="rounded-lg bg-teal-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-teal-400 transition-colors shadow-md shadow-teal-500/10 flex items-center"
                 >
                   {formLoading ? 'Registering...' : 'Register Equipment'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Edit Asset */}
+      {showEditModal && editingAsset && (
+        <div id="edit-asset-modal" className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full border border-slate-100 shadow-xl overflow-hidden animate-zoom-in">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-slate-100 bg-slate-50">
+              <div>
+                <h3 className="font-display font-bold text-lg text-slate-900 tracking-tight">Edit Equipment: {editingAsset.assetCode}</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Update equipment details and assignments.</p>
+              </div>
+              <button
+                id="close-edit-modal"
+                onClick={() => { setShowEditModal(false); setEditingAsset(null); }}
+                className="p-1 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-700 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleEditAssetSubmit} className="p-6 space-y-4">
+              {formError && (
+                <div className="p-3 rounded-lg bg-rose-50 text-rose-600 text-xs border border-rose-100 font-medium">
+                  {formError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5 col-span-2">
+                  <label className="text-xs font-semibold text-slate-500">Equipment Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingAsset.assetName}
+                    onChange={e => setEditingAsset({ ...editingAsset, assetName: e.target.value })}
+                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-500">Monitoring Category *</label>
+                  <select
+                    value={editingAsset.category}
+                    onChange={e => setEditingAsset({ ...editingAsset, category: e.target.value })}
+                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-sm outline-none focus:border-teal-500"
+                  >
+                    <option value="HVAC">HVAC</option>
+                    <option value="Electrical">Electrical</option>
+                    <option value="Plumbing">Plumbing</option>
+                    <option value="Transportation">Transportation</option>
+                    <option value="IT">IT</option>
+                    <option value="General">General</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5 col-span-2">
+                  <label className="text-xs font-semibold text-slate-500">Physical Location *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingAsset.location}
+                    onChange={e => setEditingAsset({ ...editingAsset, location: e.target.value })}
+                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-500">Condition</label>
+                  <select
+                    value={editingAsset.condition}
+                    onChange={e => setEditingAsset({ ...editingAsset, condition: e.target.value })}
+                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-sm outline-none focus:border-teal-500"
+                  >
+                    <option value="Excellent">Excellent</option>
+                    <option value="Good">Good</option>
+                    <option value="Fair">Fair</option>
+                    <option value="Poor">Poor</option>
+                    <option value="Broken">Broken</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-500">Status</label>
+                  <select
+                    value={editingAsset.status}
+                    onChange={e => setEditingAsset({ ...editingAsset, status: e.target.value })}
+                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-sm outline-none focus:border-teal-500"
+                  >
+                    <option value="Operational">Operational</option>
+                    <option value="Under Maintenance">Under Maintenance</option>
+                    <option value="Out of Service">Out of Service</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-500">Service Interval (Next Date)</label>
+                  <input
+                    type="date"
+                    value={editingAsset.nextService || ''}
+                    onChange={e => setEditingAsset({ ...editingAsset, nextService: e.target.value })}
+                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-sm font-mono outline-none focus:border-teal-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5 col-span-2">
+                  <label className="text-xs font-semibold text-slate-500">Assign Technician</label>
+                  <select
+                    value={editingAsset.assignedTechnician || ''}
+                    onChange={e => setEditingAsset({ ...editingAsset, assignedTechnician: e.target.value })}
+                    className="w-full rounded-lg border border-slate-200 py-2 px-3 text-sm outline-none focus:border-teal-500"
+                  >
+                    <option value="">Unassigned</option>
+                    {technicians.map(tech => (
+                      <option key={tech.id} value={tech.id}>{tech.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end space-x-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => { setShowEditModal(false); setEditingAsset(null); }}
+                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={formLoading}
+                  className="rounded-lg bg-teal-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-teal-400 transition-colors shadow-md shadow-teal-500/10 flex items-center"
+                >
+                  {formLoading ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>

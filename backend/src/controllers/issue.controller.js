@@ -140,10 +140,11 @@ export const createIssue = async (req, res) => {
       return res.status(404).json({ error: 'Asset not found.' });
     }
 
-    const allIssues = await Issue.find({});
-    const lastIssueNum = allIssues
-      .map(i => parseInt(i.issueNumber.replace('REQ-', '')))
-      .reduce((max, val) => (val > max ? val : max), 1000);
+    // Efficiently find the highest issue number — query only the last inserted issue
+    const latestIssue = await Issue.find({}).sort({ createdAt: -1 }).limit(1);
+    const lastIssueNum = latestIssue.length > 0
+      ? (parseInt(latestIssue[0].issueNumber.replace('REQ-', ''), 10) || 1000)
+      : 1000;
     const nextIssueNumber = `REQ-${lastIssueNum + 1}`;
 
     const defaultPriority = priority || 'Medium';

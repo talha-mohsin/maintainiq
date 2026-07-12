@@ -26,5 +26,11 @@ const assetSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
+// Indexes for frequent query patterns
+assetSchema.index({ status: 1 });                // dashboard: count by status
+assetSchema.index({ category: 1 });              // filter by category
+assetSchema.index({ assignedTechnician: 1 });    // filter by technician
+assetSchema.index({ createdAt: -1 });            // sort by newest first
+
 const Asset = mongoose.model('Asset', assetSchema);
 export default Asset;

@@ -36,6 +36,15 @@ export default function App() {
 
   // Parse Initial Path Routing on Startup
   useEffect(() => {
+    // Register global handler to intercept expired sessions (401 Unauthorized)
+    api.onUnauthorized(() => {
+      setCurrentUser(null);
+      setView('login');
+      if (window.location.pathname !== '/') {
+        window.history.pushState({}, '', '/');
+      }
+    });
+
     const checkPathnameAndAuth = async () => {
       setAuthLoading(true);
       

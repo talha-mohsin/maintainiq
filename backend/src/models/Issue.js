@@ -34,5 +34,15 @@ const issueSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
+// Indexes for frequent query patterns
+issueSchema.index({ assetId: 1 });                        // AI: issues by asset
+issueSchema.index({ status: 1 });                         // filter by status
+issueSchema.index({ priority: 1 });                       // filter by priority
+issueSchema.index({ assignedTechnician: 1 });             // technician's issue queue
+issueSchema.index({ createdAt: -1 });                     // newest first sort
+issueSchema.index({ assetId: 1, status: 1 });             // active issues by asset (resolveIssue)
+issueSchema.index({ assetId: 1, priority: 1 });           // health score calculation
+issueSchema.index({ category: 1, status: 1 });            // AI technician recommendation
+
 const Issue = mongoose.model('Issue', issueSchema);
 export default Issue;

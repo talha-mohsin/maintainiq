@@ -1,98 +1,269 @@
-# MaintainIQ Production Deployment Guide
+# MaintainIQ — AWS Production Deployment Guide
 
-This guide outlines step-by-step instructions for deploying MaintainIQ to production. MaintainIQ can be deployed in two architectures:
+## Architecture Overview
 
-1. **Decoupled Architecture (Recommended)**: Frontend hosted on **Vercel** (high-performance CDN) and the Backend API hosted on **Render** (Node.js/Express) connected to MongoDB Atlas and Redis Cloud.
-2. **Unified Architecture**: A single container hosting both the built React frontend and Express server on **Render**, **Railway**, or **Google Cloud Run** using the root `Dockerfile`.
+```
+Internet → CloudFront (CDN) → S3 (Frontend SPA)
+         → Route 53 (DNS) → Nginx (SSL + Rate Limit)
+                           → PM2 (Node.js Cluster)
+                           → Express API (Port 3000)
+                           → MongoDB Atlas (Database)
+                           → Upstash Redis (Cache)
+                           → Cloudinary (Images)
+                           → Google Gemini (AI)
+```
 
----
-
-## Production Credentials Checklist
-
-Ensure you have gathered the following production-grade services:
-* **MongoDB Atlas**: A hosted cluster URL (`mongodb+srv://...`).
-* **Cloudinary**: Cloud image storage credentials (`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`).
-* **Google Gemini API**: A secure server-side API Key (`GEMINI_API_KEY`) to power the triage and diagnostic engines.
-* **Redis**: A Redis URL connection string (`redis://...`) for API caching of assets and dashboards.
-* **SMTP Server / Google App Password**: Credentials (`MAIL_USER`, `MAIL_PASS`) to dispatch critical compliance emails.
-
----
-
-## Option A: Decoupled Deployment (Vercel Frontend + Render Backend)
-
-### 1. Backend API on Render
-
-Render is ideal for hosting the Express backend.
-
-#### Step-by-Step Configuration:
-1. Sign in to [Render](https://render.com) and click **New > Web Service**.
-2. Connect your GitHub repository.
-3. Configure the Web Service settings:
-   * **Name**: `maintainiq-api`
-   * **Environment**: `Node`
-   * **Root Directory**: `backend` (or leave empty if deploying as a monorepo with custom start)
-   * **Build Command**: `npm install && npm run build`
-   * **Start Command**: `node server.js`
-4. Expand **Advanced** and add the following **Environment Variables**:
-   * `NODE_ENV`: `production`
-   * `PORT`: `3000`
-   * `MONGODB_URI`: *Your MongoDB Atlas URL*
-   * `REDIS_URL`: *Your Redis Connection String* (Render provides a managed Redis service or use Upstash/RedisCloud)
-   * `GEMINI_API_KEY`: *Your Google Gen AI API Key*
-   * `SECRET_KEY`: *A long cryptographically secure random string*
-   * `CLOUDINARY_CLOUD_NAME`: *Your Cloudinary cloud name*
-   * `CLOUDINARY_API_KEY`: *Your Cloudinary API key*
-   * `CLOUDINARY_API_SECRET`: *Your Cloudinary API secret*
-   * `MAIL_USER`: *Your sender email address*
-   * `MAIL_PASS`: *Your SMTP server application password*
-5. Click **Create Web Service**. Render will build and deploy the backend. Copy your service URL (e.g., `https://maintainiq-api.onrender.com`).
+| Layer | Service | Purpose |
+|-------|---------|---------|
+| Frontend | Amazon S3 + CloudFront | Static React SPA, global CDN |
+| Backend | AWS EC2 + PM2 + Nginx | Express API, SSL, reverse proxy |
+| Database | MongoDB Atlas | Managed database cluster |
+| Cache | Upstash Redis | API response caching |
+| Images | Cloudinary | Evidence image uploads/storage |
+| AI | Google Gemini API | Triage, maintenance AI |
+| CI/CD | GitHub Actions | Automated deploy on push to main |
+| SSL | Let's Encrypt (Certbot) | Free SSL managed by Nginx |
 
 ---
 
-### 2. Frontend SPA on Vercel
+## Prerequisites
 
-Vercel is the premier host for static Vite-based Single Page Applications.
+Gather these credentials before starting:
 
-#### Step-by-Step Configuration:
-1. Sign in to [Vercel](https://vercel.com) and click **Add New > Project**.
-2. Import your GitHub repository.
-3. Configure the project:
-   * **Framework Preset**: `Vite`
-   * **Root Directory**: `frontend`
-   * **Build Command**: `npm run build`
-   * **Output Directory**: `dist`
-4. Expand **Environment Variables** and add the following keys:
-   * `VITE_API_URL`: `https://maintainiq-api.onrender.com/api` (Point this to your Render service URL from above, appending `/api`)
-5. Click **Deploy**. Vercel will build and provision your edge application.
-
-#### Crucial Production CORS & Cookie Sync:
-Because the frontend (`vercel.app`) and backend (`onrender.com`) exist on different domains:
-* Ensure cookies are sent securely. The server sets tokens via secure HTTPOnly cookies.
-* If deploying on mismatched root domains, ensure your backend allows CORS credentials.
-* Alternatively, map both to subdomains of a single root domain (e.g. `app.yourdomain.com` and `api.yourdomain.com`) to allow cookie sharing seamlessly.
+- **AWS Account** with EC2 + S3 + CloudFront + IAM access
+- **MongoDB Atlas** cluster URI (`mongodb+srv://...`)
+- **Upstash Redis** connection string (`rediss://...`)
+- **Cloudinary** account (cloud name, API key, API secret)
+- **Google Gemini API** key
+- **Domain name** pointed to your EC2 IP via DNS A record
 
 ---
 
-## Option B: Unified Deployment (Single Container)
+## Step 1 — EC2 Instance Setup
 
-Unified deployment builds the frontend inside the backend, resolving CORS and cookie matching instantly.
+### Launch Instance
+1. EC2 Console → **Launch Instance**
+2. **AMI**: Ubuntu 24.04 LTS
+3. **Instance type**: `t3.small` (minimum) or `t3.medium` (recommended)
+4. **Key pair**: Create and download `.pem` key → store it in GitHub Secrets
+5. **Security Group** — open inbound ports:
+   - `22` (SSH — restrict to your IP)
+   - `80` (HTTP — from anywhere)
+   - `443` (HTTPS — from anywhere)
+   - `3000` (optional, for direct health check testing)
 
-1. Sign in to [Render](https://render.com) and click **New > Web Service**.
-2. Connect your GitHub repository.
-3. Configure the settings:
-   * **Name**: `maintainiq-fullstack`
-   * **Environment**: `Docker`
-   * **Docker Command**: (Leave default; Docker engine automatically picks up the root `Dockerfile`)
-4. Add all environment variables listed in the Backend section to **Render Environment Variables**.
-5. Click **Deploy**. Docker will run the multi-stage build:
-   * Node compiles the Vite client in Stage 1.
-   * Stage 2 compiles and launches the Node/Express server on port `3000`, serving the build statically while managing API routing cleanly.
+### Initial Server Setup
+
+```bash
+# SSH into instance
+ssh -i your-key.pem ubuntu@YOUR_EC2_PUBLIC_IP
+
+# System update
+sudo apt update && sudo apt upgrade -y
+
+# Install Node.js 22 LTS
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Install PM2 globally
+sudo npm install -g pm2
+
+# Install Nginx
+sudo apt install -y nginx
+
+# Install Certbot
+sudo apt install -y certbot python3-certbot-nginx
+
+# Create PM2 log directory
+sudo mkdir -p /var/log/pm2
+sudo chown ubuntu:ubuntu /var/log/pm2
+
+# Clone repository
+git clone https://github.com/talha-mohsin/final-hackathon.git maintainiq
+cd maintainiq
+
+# Create .env file with production values
+cp .env.example .env
+nano .env   # Fill in all values
+```
 
 ---
 
-## Production Security & Validation Check
+## Step 2 — Nginx Configuration
 
-MaintainIQ has standard fail-safe assertions built-in:
-1. **MongoDB Atlas Safeguard**: In `production` mode, the server will **refuse to start** and throw an error if the environment variable `MONGODB_URI` is missing or fails to authenticate, protecting against silent sandbox data leakage.
-2. **Cloudinary Asset Safety**: The server will immediately crash if an image upload is triggered in `production` and Cloudinary credentials are not present, ensuring that compliance evidence is never lost.
-3. **Fail-Safe Caching**: Caching will automatically and gracefully fall back to local server-side memory if the Redis cluster undergoes failover, ensuring 100% continuous uptime.
+```bash
+# Copy Nginx config
+sudo cp nginx.conf /etc/nginx/sites-available/maintainiq
+
+# Replace YOUR_DOMAIN_HERE with your actual domain
+sudo sed -i 's/YOUR_DOMAIN_HERE/yourdomain.com/g' /etc/nginx/sites-available/maintainiq
+
+# Enable site
+sudo ln -sf /etc/nginx/sites-available/maintainiq /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+
+# Test config
+sudo nginx -t
+
+# Reload Nginx
+sudo systemctl reload nginx
+```
+
+### SSL with Certbot
+
+```bash
+# Obtain SSL certificate (DNS must already point to this server)
+sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
+
+# Auto-renewal (runs twice daily via cron)
+sudo systemctl enable certbot.timer
+```
+
+---
+
+## Step 3 — First Deployment
+
+```bash
+# Install dependencies
+npm ci --include=dev
+
+# Build application
+npm run build
+
+# Start with PM2
+pm2 start ecosystem.config.cjs
+
+# Save PM2 process list (auto-restart on reboot)
+pm2 save
+pm2 startup | sudo bash
+
+# Verify health
+curl http://localhost:3000/health
+```
+
+---
+
+## Step 4 — S3 + CloudFront (Frontend)
+
+### Create S3 Bucket
+1. S3 Console → **Create bucket**
+   - Name: `maintainiq-frontend` (must be globally unique)
+   - Region: your region
+   - **Uncheck** "Block all public access"
+2. **Properties** → Enable Static Website Hosting
+   - Index document: `index.html`
+   - Error document: `index.html` (SPA routing)
+3. **Permissions → Bucket Policy**:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": "*",
+    "Action": "s3:GetObject",
+    "Resource": "arn:aws:s3:::maintainiq-frontend/*"
+  }]
+}
+```
+
+### Create CloudFront Distribution
+1. CloudFront Console → **Create Distribution**
+   - Origin: select your S3 bucket
+   - Viewer Protocol: **Redirect HTTP to HTTPS**
+   - Compress objects: **Yes**
+   - Default root object: `index.html`
+   - Error pages: 404 → `/index.html` (SPA routing)
+2. Note the **Distribution ID** and **Domain Name** (e.g., `xxxxx.cloudfront.net`)
+
+---
+
+## Step 5 — GitHub Actions Secrets
+
+Add these secrets in your GitHub repository (**Settings → Secrets and variables → Actions**):
+
+| Secret Name | Value |
+|-------------|-------|
+| `EC2_HOST` | Your EC2 public IP or domain |
+| `EC2_USER` | `ubuntu` |
+| `EC2_SSH_KEY` | Contents of your `.pem` private key |
+| `AWS_ACCESS_KEY_ID` | IAM user access key |
+| `AWS_SECRET_ACCESS_KEY` | IAM user secret key |
+| `AWS_REGION` | e.g., `us-east-1` |
+| `S3_BUCKET_NAME` | e.g., `maintainiq-frontend` |
+| `CLOUDFRONT_DISTRIBUTION_ID` | CloudFront distribution ID |
+| `APP_URL` | e.g., `https://api.yourdomain.com` |
+| `MONGODB_URI` | MongoDB Atlas URI |
+| `REDIS_URL` | Upstash/Redis connection string |
+| `GEMINI_API_KEY` | Google Gemini API key |
+| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name |
+| `CLOUDINARY_API_KEY` | Cloudinary API key |
+| `CLOUDINARY_API_SECRET` | Cloudinary API secret |
+| `JWT_SECRET` | 64+ char random string |
+| `ALLOWED_ORIGINS` | `https://yourdomain.com,https://xxxxx.cloudfront.net` |
+
+---
+
+## Step 6 — Automated Deployment (CI/CD)
+
+After secrets are configured, every push to `main` will:
+1. **CI**: Install → Lint → Build → Docker validate → npm audit
+2. **CD Backend**: SSH → EC2 → git pull → npm ci → build → PM2 reload → health check → rollback on failure
+3. **CD Frontend**: Build with `VITE_API_URL` → S3 sync → CloudFront invalidate
+
+---
+
+## Local Docker Development
+
+```bash
+# Copy and fill environment
+cp .env.example .env
+
+# Build and run all services (app + mongodb + redis)
+docker compose up --build
+
+# Access at http://localhost:3000
+# Health: http://localhost:3000/health
+# API Docs: http://localhost:3000/api/docs
+```
+
+---
+
+## Production Security Checklist
+
+- [x] JWT_SECRET set to 64+ char random value
+- [x] MONGODB_URI uses Atlas with auth
+- [x] Cloudinary credentials set
+- [x] Nginx rate limiting active
+- [x] Helmet security headers active
+- [x] CORS restricted to known origins
+- [x] HTTPS enforced (HTTP redirects)
+- [x] Cookies: httpOnly + secure + sameSite=strict
+- [x] PM2 auto-restart on crash
+- [x] PM2 memory limit: 512MB
+- [x] Docker HEALTHCHECK configured
+- [x] No secrets in source code
+- [x] `.env` in `.gitignore`
+
+---
+
+## Useful Commands
+
+```bash
+# Check application status
+pm2 status
+
+# View live logs
+pm2 logs maintainiq
+
+# Restart
+pm2 restart maintainiq
+
+# Zero-downtime reload (no dropped requests)
+pm2 reload maintainiq
+
+# Health check
+curl https://api.yourdomain.com/health
+
+# API Docs
+curl https://api.yourdomain.com/api/docs
+```
