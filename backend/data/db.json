@@ -1,0 +1,262 @@
+{
+  "users": [
+    {
+      "id": "usr-1",
+      "name": "Sarah Jenkins",
+      "email": "admin@maintainiq.com",
+      "password": "$2b$10$CpsoNxQLf7A8sIxVGMIPNOglrX/IoAlWgID8X0yaOJ6g9bvk3czNi",
+      "role": "Admin",
+      "avatar": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
+      "createdAt": "2026-01-15T08:00:00.000Z"
+    },
+    {
+      "id": "usr-2",
+      "name": "Marcus Vance",
+      "email": "tech@maintainiq.com",
+      "password": "$2b$10$CpsoNxQLf7A8sIxVGMIPNOZAED8SxU0eT/QyIY0cebkLwCmP5mhtK",
+      "role": "Technician",
+      "avatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150",
+      "createdAt": "2026-01-16T09:30:00.000Z"
+    },
+    {
+      "id": "usr-3",
+      "name": "John Doe",
+      "email": "john@maintainiq.com",
+      "password": "$2b$10$CpsoNxQLf7A8sIxVGMIPNOZAED8SxU0eT/QyIY0cebkLwCmP5mhtK",
+      "role": "Technician",
+      "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150",
+      "createdAt": "2026-02-01T10:00:00.000Z"
+    }
+  ],
+  "assets": [
+    {
+      "id": "ast-1",
+      "assetName": "HVAC Server Room AC-01",
+      "assetCode": "HVAC-SR1-01",
+      "category": "HVAC",
+      "location": "Server Room A, 4th Floor",
+      "condition": "Fair",
+      "status": "Operational",
+      "assignedTechnician": "usr-2",
+      "assignedTechnicianName": "Marcus Vance",
+      "lastService": "2026-06-10",
+      "nextService": "2026-09-10",
+      "qrCode": "",
+      "publicURL": "/public/asset/HVAC-SR1-01",
+      "createdBy": "usr-1",
+      "createdAt": "2026-02-10T14:22:00.000Z"
+    },
+    {
+      "id": "ast-2",
+      "assetName": "Main Passenger Elevator B",
+      "assetCode": "ELEV-MAIN-B",
+      "category": "Transportation",
+      "location": "Central Lobby, East Wing",
+      "condition": "Excellent",
+      "status": "Operational",
+      "assignedTechnician": null,
+      "assignedTechnicianName": null,
+      "lastService": "2026-07-01",
+      "nextService": "2026-10-01",
+      "qrCode": "",
+      "publicURL": "/public/asset/ELEV-MAIN-B",
+      "createdBy": "usr-1",
+      "createdAt": "2026-02-12T11:05:00.000Z"
+    },
+    {
+      "id": "ast-3",
+      "assetName": "Backup Diesel Generator PWR-3",
+      "assetCode": "GEN-PWR-03",
+      "category": "Electrical",
+      "location": "Sub-Basement Utility Room 2",
+      "condition": "Poor",
+      "status": "Under Maintenance",
+      "assignedTechnician": "usr-3",
+      "assignedTechnicianName": "John Doe",
+      "lastService": "2026-05-14",
+      "nextService": "2026-08-14",
+      "qrCode": "",
+      "publicURL": "/public/asset/GEN-PWR-03",
+      "createdBy": "usr-1",
+      "createdAt": "2026-02-15T09:40:00.000Z"
+    }
+  ],
+  "issues": [
+    {
+      "id": "iss-1",
+      "issueNumber": "REQ-1001",
+      "assetId": "ast-1",
+      "assetName": "HVAC Server Room AC-01",
+      "title": "AC Leaking Water & Making Loud Vibrating Noise",
+      "description": "The AC unit in the main server room is dripping water directly onto Rack B. There is also a continuous grinding/vibrating noise coming from the fan motor housing, and temperature is rising slowly.",
+      "priority": "Critical",
+      "category": "HVAC",
+      "reporter": "David Finch (IT Admin)",
+      "status": "Assigned",
+      "aiGenerated": true,
+      "possibleCauses": [
+        "Clogged condensate drain line causing overflow.",
+        "Loose fan motor mounting brackets or worn fan bearings.",
+        "Evaporator coil freezing due to low refrigerant or dirty filters."
+      ],
+      "initialChecks": [
+        "Verify condensate drain is clear and drip pan is not cracked.",
+        "Check fan assembly and housing for loose screws or bearing play.",
+        "Inspect air filters and check evaporator coil for frost build-up."
+      ],
+      "safetyWarning": "HIGH VOLTAGE: Shut off power at breaker HVAC-B4 before opening fan motor housing. Avoid water contact with active server racks.",
+      "assignedTechnician": "usr-2",
+      "assignedTechnicianName": "Marcus Vance",
+      "imageEvidence": null,
+      "createdAt": "2026-07-10T15:30:00.000Z",
+      "completedDate": null
+    },
+    {
+      "id": "iss-2",
+      "issueNumber": "REQ-1002",
+      "assetId": "ast-3",
+      "assetName": "Backup Diesel Generator PWR-3",
+      "title": "Battery Voltage Low Error during Weekly Run Test",
+      "description": "Weekly diagnostic self-test flagged failure code ERR-BAT-VOLT. Starting motor struggled to crank and voltage registered at 11.2V instead of the normal 24V charger float.",
+      "priority": "High",
+      "category": "Electrical",
+      "reporter": "System Automated Diagnostics",
+      "status": "Inspection Started",
+      "aiGenerated": true,
+      "possibleCauses": [
+        "Failing lead-acid starter battery cell.",
+        "Malfunctioning trickle charger unit or blown fuses.",
+        "Loose or corroded battery terminal cables."
+      ],
+      "initialChecks": [
+        "Test battery open-circuit voltage and load-test the cells.",
+        "Verify battery charger output current and voltage settings.",
+        "Clean and tighten all battery connections."
+      ],
+      "safetyWarning": "ACID & SPARK HAZARD: Always wear eye protection. Use insulated tools. Vent battery room to avoid hydrogen gas accumulation.",
+      "assignedTechnician": "usr-3",
+      "assignedTechnicianName": "John Doe",
+      "imageEvidence": null,
+      "createdAt": "2026-07-11T08:15:00.000Z",
+      "completedDate": null
+    },
+    {
+      "id": "iss-3",
+      "issueNumber": "REQ-1003",
+      "assetId": "ast-2",
+      "assetName": "Main Passenger Elevator B",
+      "title": "Cabin Indicator Lights Flickering on Floors 3-5",
+      "description": "The floor indicator light inside Cabin B flickers and sometimes goes dark when traveling between floors 3 and 5. Elevator is operating normally otherwise.",
+      "priority": "Low",
+      "category": "Transportation",
+      "reporter": "Receptionist Desk",
+      "status": "Closed",
+      "aiGenerated": false,
+      "possibleCauses": [
+        "Loose ribbon cable connector behind control panel.",
+        "Failing LED display segment."
+      ],
+      "initialChecks": [
+        "Check ribbon connections inside cabin car header panel.",
+        "Test voltage to the cabin display board."
+      ],
+      "safetyWarning": "Lockout/tagout elevator controls before removing the cabin internal panel plates.",
+      "assignedTechnician": "usr-2",
+      "assignedTechnicianName": "Marcus Vance",
+      "imageEvidence": null,
+      "createdAt": "2026-07-01T10:00:00.000Z",
+      "completedDate": "2026-07-02T14:30:00.000Z"
+    }
+  ],
+  "maintenances": [
+    {
+      "id": "maint-1",
+      "issueId": "iss-3",
+      "assetId": "ast-2",
+      "inspectionNotes": "Located loose ribbon cable connector under the main operating panel. Ribbon pins were dusty but otherwise intact. display board is in good working order.",
+      "parts": [
+        "Display Ribbon Cable Spacer (OEM-114)",
+        "Contact Cleaner Spray"
+      ],
+      "cost": 45,
+      "evidence": null,
+      "maintenanceDate": "2026-07-02T13:00:00Z",
+      "completedDate": "2026-07-02T14:30:00Z",
+      "summary": "Tightened internal connectors, sprayed anti-corrosion cleaning agent on terminals, and secured ribbon cable in place. Reassembled and tested successfully through 15 run cycles."
+    }
+  ],
+  "history": [
+    {
+      "id": "hst-1",
+      "assetId": "ast-1",
+      "action": "Asset Registered",
+      "performedBy": "Sarah Jenkins (Admin)",
+      "issueId": null,
+      "timestamp": "2026-02-10T14:22:00.000Z"
+    },
+    {
+      "id": "hst-2",
+      "assetId": "ast-2",
+      "action": "Asset Registered",
+      "performedBy": "Sarah Jenkins (Admin)",
+      "issueId": null,
+      "timestamp": "2026-02-12T11:05:00.000Z"
+    },
+    {
+      "id": "hst-3",
+      "assetId": "ast-3",
+      "action": "Asset Registered",
+      "performedBy": "Sarah Jenkins (Admin)",
+      "issueId": null,
+      "timestamp": "2026-02-15T09:40:00.000Z"
+    },
+    {
+      "id": "hst-4",
+      "assetId": "ast-2",
+      "action": "Issue Reported",
+      "performedBy": "Receptionist Desk",
+      "issueId": "iss-3",
+      "timestamp": "2026-07-01T10:00:00.000Z"
+    },
+    {
+      "id": "hst-5",
+      "assetId": "ast-2",
+      "action": "Assigned",
+      "performedBy": "Sarah Jenkins (Admin)",
+      "issueId": "iss-3",
+      "timestamp": "2026-07-01T11:00:00.000Z"
+    },
+    {
+      "id": "hst-6",
+      "assetId": "ast-2",
+      "action": "Maintenance Completed",
+      "performedBy": "Marcus Vance (Technician)",
+      "issueId": "iss-3",
+      "timestamp": "2026-07-02T14:30:00.000Z"
+    },
+    {
+      "id": "hst-7",
+      "assetId": "ast-1",
+      "action": "Issue Reported",
+      "performedBy": "David Finch (IT Admin)",
+      "issueId": "iss-1",
+      "timestamp": "2026-07-10T15:30:00.000Z"
+    },
+    {
+      "id": "hst-8",
+      "assetId": "ast-1",
+      "action": "Assigned",
+      "performedBy": "Sarah Jenkins (Admin)",
+      "issueId": "iss-1",
+      "timestamp": "2026-07-10T16:00:00.000Z"
+    },
+    {
+      "id": "hst-9",
+      "assetId": "ast-3",
+      "action": "Issue Reported",
+      "performedBy": "System Diagnostics",
+      "issueId": "iss-2",
+      "timestamp": "2026-07-11T08:15:00.000Z"
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # MaintainIQ Unified Full-Stack Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: maintainiq-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - PORT=3000
+      - MONGODB_URI=mongodb://mongodb:27017/maintainiq
+      - REDIS_URL=redis://redis:6379
+      - SECRET_KEY=maintainiq-local-development-secret-key-2026
+      # Put actual keys in .env and compose will load them, or define them here
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+      - MAIL_USER=${MAIL_USER}
+      - MAIL_PASS=${MAIL_PASS}
+    depends_on:
+      - mongodb
+      - redis
+    volumes:
+      - .:/app
+      - /app/node_modules
+
+  # Local Caching Service
+  redis:
+    image: redis:alpine
+    container_name: maintainiq-cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: always
+
+  # Local MongoDB Database
+  mongodb:
+    image: mongo:latest
+    container_name: maintainiq-db
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    restart: always
+
+volumes:
+  redis-data:
+    driver: local
+  mongo-data:
+    driver: local
