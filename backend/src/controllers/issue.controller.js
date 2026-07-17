@@ -130,89 +130,90 @@ export const triageIssueAI = async (req, res) => {
 export const createIssue = async (req, res) => {
   const { assetId, title, description, priority, category, reporter, aiGenerated, possibleCauses, initialChecks, safetyWarning, imageEvidence } = req.body;
 
+  // Validation is handled by middleware; still ensure required fields exist
   if (!assetId || !title || !description || !reporter) {
-    return res.status(400).json({ error: 'Asset, title, description, and reporter name are required.' });
+    throw new ValidationError('Asset, title, description, and reporter are required.');
   }
 
-  try {
-    const asset = await Asset.findById(assetId);
-    if (!asset) {
-      return res.status(404).json({ error: 'Asset not found.' });
-    }
+  const asset = await Asset.findById(assetId);
+  if (!asset) {
+    throw new NotFoundError('Asset not found.');
+  }
 
-    // Efficiently find the highest issue number — query only the last inserted issue
-    const latestIssue = await Issue.find({}).sort({ createdAt: -1 }).limit(1);
-    const lastIssueNum = latestIssue.length > 0
-      ? (parseInt(latestIssue[0].issueNumber.replace('REQ-', ''), 10) || 1000)
-      : 1000;
-    const nextIssueNumber = `REQ-${lastIssueNum + 1}`;
+  // Determine next issue number
+  const latestIssue = await Issue.find({}).sort({ createdAt: -1 }).limit(1);
+  const lastIssueNum = latestIssue.length > 0
+    ? (parseInt(latestIssue[0].issueNumber.replace('REQ-', ''), 10) || 1000)
+    : 1000;
+  const nextIssueNumber = `REQ-${lastIssueNum + 1}`;
 
-    const defaultPriority = priority || 'Medium';
+  const defaultPriority = priority || 'Medium';
 
-    const newIssueId = `iss-${Date.now()}`;
-    const newIssue = new Issue({
-      _id: newIssueId,
-      issueNumber: nextIssueNumber,
+  const newIssueId = `iss-${Date.now()}`;
+  const newIssue = new Issue({
+    _id: newIssueId,
+    issueNumber: nextIssueNumber,
+    assetId: asset._id,
+    assetName: asset.assetName,
+    title,
+    description,
+    priority: defaultPriority,
+    category: category || asset.category || 'General',
+    reporter,
+    status: 'Reported',
+    aiGenerated: aiGenerated || false,
+    possibleCauses: possibleCauses || [],
+    initialChecks: initialChecks || [],
+    safetyWarning: safetyWarning || '',
+    assignedTechnician: null,
+    assignedTechnicianName: null,
+    imageEvidence: imageEvidence || null,
+    createdAt: new Date(),
+    completedDate: null
+  });
+
+  await newIssue.save();
+
+  // Auto-escalate asset status for high/critical priority
+  if (['High', 'Critical'].includes(defaultPriority)) {
+    const updatedStatus = defaultPriority === 'Critical' ? 'Out of Service' : 'Under Maintenance';
+    asset.status = updatedStatus;
+    await asset.save();
+
+    const historyAuto = new History({
+      _id: `hst-${Date.now()}-auto`,
       assetId: asset._id,
-      assetName: asset.assetName,
-      title,
-      description,
-      priority: defaultPriority,
-      category: category || asset.category || 'General',
-      reporter,
-      status: 'Reported',
-      aiGenerated: aiGenerated || false,
-      possibleCauses: possibleCauses || [],
-      initialChecks: initialChecks || [],
-      safetyWarning: safetyWarning || '',
-      assignedTechnician: null,
-      assignedTechnicianName: null,
-      imageEvidence: imageEvidence || null,
-      createdAt: new Date(),
-      completedDate: null
-    });
-
-    await newIssue.save();
-
-    // If priority is high or critical, update asset status to Under Maintenance or Out of Service
-    if (['High', 'Critical'].includes(defaultPriority)) {
-      const updatedStatus = defaultPriority === 'Critical' ? 'Out of Service' : 'Under Maintenance';
-      asset.status = updatedStatus;
-      await asset.save();
-
-      const historyAuto = new History({
-        _id: `hst-${Date.now()}-auto`,
-        assetId: asset._id,
-        action: `Status set to ${updatedStatus} (Auto-escalation)`,
-        performedBy: 'System',
-        timestamp: new Date()
-      });
-      await historyAuto.save();
-    }
-
-    const historyRecord = new History({
-      _id: `hst-${Date.now()}-reported`,
-      assetId: asset._id,
-      action: `Issue Reported: ${nextIssueNumber} (${title})`,
-      performedBy: reporter,
-      issueId: newIssueId,
+      action: `Status set to ${updatedStatus} (Auto-escalation)`,
+      performedBy: 'System',
       timestamp: new Date()
     });
-    await historyRecord.save();
-
-    await cacheService.invalidatePattern('issues:');
-    await cacheService.invalidatePattern('dashboard:');
-    await cacheService.invalidatePattern('assets:');
-
-    res.status(201).json({ issue: newIssue });
-  } catch (err) {
-    console.error("createIssue error:", err);
-    res.status(500).json({ error: 'Server error filing issue request' });
+    await historyAuto.save();
   }
+
+  const historyRecord = new History({
+    _id: `hst-${Date.now()}-reported`,
+    assetId: asset._id,
+    action: `Issue Reported: ${nextIssueNumber} (${title})`,
+    performedBy: reporter,
+    issueId: newIssueId,
+    timestamp: new Date()
+  });
+  await historyRecord.save();
+
+  await cacheService.invalidatePattern('issues:');
+  await cacheService.invalidatePattern('dashboard:');
+  await cacheService.invalidatePattern('assets:');
+
+  res.status(201).json({
+    success: true,
+    message: 'Issue created successfully.',
+    errorCode: null,
+    data: { issue: newIssue }
+  });
 };
 
 export const updateIssue = async (req, res) => {
-  const { assignedTechnician, status, priority } = req.body;
+  const { assignedTechnician, status, priority, title, description, category } = req.body;
 
   try {
     const issue = await Issue.findById(req.params.id);
@@ -236,12 +237,12 @@ export const updateIssue = async (req, res) => {
         issue.status = 'Assigned';
       }
     }
-    if (status) {
-      issue.status = status;
-    }
-    if (priority) {
-      issue.priority = priority;
-    }
+    if (status) issue.status = status;
+    if (priority) issue.priority = priority;
+    if (title) issue.title = title;
+    if (description) issue.description = description;
+    if (category) issue.category = category;
+
 
     await issue.save();
 
@@ -304,88 +305,116 @@ export const updateIssue = async (req, res) => {
 export const resolveIssue = async (req, res) => {
   const { inspectionNotes, parts, cost, evidence, summary } = req.body;
 
-  try {
-    const issue = await Issue.findById(req.params.id);
-    if (!issue) {
-      return res.status(404).json({ error: 'Issue not found.' });
+  if (!inspectionNotes || !summary) {
+    throw new ValidationError('Inspection notes and repair summary are required to resolve.');
+  }
+
+  const issue = await Issue.findById(req.params.id);
+  if (!issue) {
+    throw new NotFoundError('Issue not found.');
+  }
+
+  const completeDate = new Date();
+
+  // Create Maintenance Record
+  const newMaintId = `maint-${Date.now()}`;
+  const newMaint = new Maintenance({
+    _id: newMaintId,
+    issueId: issue._id,
+    assetId: issue.assetId,
+    inspectionNotes,
+    parts: parts || [],
+    cost: Number(cost) || 0,
+    evidence: evidence || null,
+    maintenanceDate: issue.createdAt,
+    completedDate: completeDate,
+    summary
+  });
+  await newMaint.save();
+
+  // Update Issue status
+  issue.status = 'Resolved';
+  issue.completedDate = completeDate;
+  await issue.save();
+
+  const performer = req.userName || 'Authorized User';
+
+  // Check if any other issues are still active on this asset
+  const activeIssuesCount = await Issue.countDocuments({
+    assetId: issue.assetId,
+    _id: { $ne: issue._id },
+    status: { $nin: ['Resolved', 'Closed'] }
+  });
+
+  if (activeIssuesCount === 0) {
+    const asset = await Asset.findById(issue.assetId);
+    if (asset) {
+      asset.status = 'Operational';
+      asset.condition = 'Excellent';
+      asset.lastService = completeDate.toISOString().split('T')[0];
+      await asset.save();
     }
-
-    if (!inspectionNotes || !summary) {
-      return res.status(400).json({ error: 'Inspection notes and repair summary are required to resolve.' });
-    }
-
-    const completeDate = new Date();
-
-    // Create Maintenance Record
-    const newMaintId = `maint-${Date.now()}`;
-    const newMaint = new Maintenance({
-      _id: newMaintId,
-      issueId: issue._id,
+    const historyRestore = new History({
+      _id: `hst-${Date.now()}-restore`,
       assetId: issue.assetId,
-      inspectionNotes,
-      parts: parts || [],
-      cost: Number(cost) || 0,
-      evidence: evidence || null,
-      maintenanceDate: issue.createdAt,
-      completedDate: completeDate,
-      summary
-    });
-
-    await newMaint.save();
-
-    // Update Issue status
-    issue.status = 'Resolved';
-    issue.completedDate = completeDate;
-    await issue.save();
-
-    const performer = req.userName || 'Authorized User';
-
-    // Check if any other issues are still active on this asset
-    const activeIssuesCount = await Issue.countDocuments({
-      assetId: issue.assetId,
-      _id: { $ne: issue._id },
-      status: { $nin: ['Resolved', 'Closed'] }
-    });
-
-    if (activeIssuesCount === 0) {
-      // Restore asset status to Operational
-      const asset = await Asset.findById(issue.assetId);
-      if (asset) {
-        asset.status = 'Operational';
-        asset.condition = 'Excellent'; // Repaired
-        asset.lastService = completeDate.toISOString().split('T')[0];
-        await asset.save();
-      }
-
-      const historyRestore = new History({
-        _id: `hst-${Date.now()}-restore`,
-        assetId: issue.assetId,
-        action: `Asset restored to Operational after repair`,
-        performedBy: performer,
-        timestamp: new Date()
-      });
-      await historyRestore.save();
-    }
-
-    const historyResolve = new History({
-      _id: `hst-${Date.now()}-resolve`,
-      assetId: issue.assetId,
-      action: `Resolved Issue ${issue.issueNumber} - Repair Cost: $${newMaint.cost}`,
+      action: `Asset restored to Operational after repair`,
       performedBy: performer,
-      issueId: issue._id,
       timestamp: new Date()
     });
-    await historyResolve.save();
-
-    await cacheService.invalidatePattern('issues:');
-    await cacheService.invalidatePattern('dashboard:');
-    await cacheService.invalidatePattern('assets:');
-
-    res.json({ message: 'Issue resolved successfully.', maintenance: newMaint });
-  } catch (err) {
-    console.error("resolveIssue error:", err);
-    res.status(500).json({ error: 'Server error resolving issue' });
+    await historyRestore.save();
   }
+
+  const historyResolve = new History({
+    _id: `hst-${Date.now()}-resolve`,
+    assetId: issue.assetId,
+    action: `Resolved Issue ${issue.issueNumber} - Repair Cost: $${newMaint.cost}`,
+    performedBy: performer,
+    issueId: issue._id,
+    timestamp: new Date()
+  });
+  await historyResolve.save();
+
+  await cacheService.invalidatePattern('issues:');
+  await cacheService.invalidatePattern('dashboard:');
+  await cacheService.invalidatePattern('assets:');
+
+  res.json({
+    success: true,
+    message: 'Issue resolved successfully.',
+    errorCode: null,
+    data: { maintenance: newMaint }
+  });
+};
+
+export const deleteIssue = async (req, res) => {
+  const issue = await Issue.findById(req.params.id);
+  if (!issue) {
+    throw new NotFoundError('Issue not found.');
+  }
+
+  const performer = req.userName || 'Authorized User';
+
+  // Log deletion in history before removing
+  const historyDelete = new History({
+    _id: `hst-${Date.now()}-delete`,
+    assetId: issue.assetId,
+    action: `Issue ${issue.issueNumber} deleted by ${performer}`,
+    performedBy: performer,
+    timestamp: new Date()
+  });
+  await historyDelete.save();
+
+  await Issue.findByIdAndDelete(req.params.id);
+
+  await cacheService.invalidatePattern('issues:');
+  await cacheService.invalidatePattern('dashboard:');
+
+  res.json({
+    success: true,
+    message: 'Issue deleted successfully.',
+    errorCode: null,
+    data: null
+  });
 };
 
 export const generateAIDraftSummary = async (req, res) => {

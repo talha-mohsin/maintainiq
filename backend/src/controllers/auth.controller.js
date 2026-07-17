@@ -6,6 +6,8 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
+import asyncHandler from '../utils/asyncHandler.js';
+import { ValidationError, AuthError, NotFoundError, ApiError } from '../utils/ApiError.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || process.env.SECRET_KEY;
 
@@ -18,21 +20,21 @@ if (!JWT_SECRET) {
 
 const EFFECTIVE_SECRET = JWT_SECRET || 'dev-only-secret-not-for-production-use';
 
-export const login = async (req, res) => {
+export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
-    return res.status(400).json({ error: 'Please enter both email and password' });
+    throw new ValidationError('Please enter both email and password');
   }
 
   try {
     const user = await User.findOne({ email: { $regex: new RegExp(`^${email}$`, 'i') } });
     if (!user || !user.password) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      throw new AuthError('Invalid email or password');
     }
 
     const matches = bcrypt.compareSync(password, user.password);
     if (!matches) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      throw new AuthError('Invalid email or password');
     }
 
     // Create JWT token (valid for 24h)
@@ -61,23 +63,23 @@ export const login = async (req, res) => {
       avatar: user.avatar,
       createdAt: user.createdAt
     };
-    res.json({ user: safeUser, token });
+    res.json({ success: true, message: 'Login successful', errorCode: null, data: { user: safeUser, token } });
   } catch (err) {
     console.error("Login error:", err);
-    res.status(500).json({ error: 'Server error during login' });
+    throw new ApiError('Server error during login', 500, 'ERR_INTERNAL');
   }
-};
+});
 
-export const logout = (req, res) => {
+export const logout = asyncHandler(async (req, res) => {
   res.clearCookie('token');
-  res.json({ message: 'Successfully logged out' });
-};
+  res.json({ success: true, message: 'Successfully logged out', errorCode: null, data: null });
+});
 
-export const me = async (req, res) => {
+export const me = asyncHandler(async (req, res) => {
   try {
     const user = await User.findById(req.userId);
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      throw new NotFoundError('User not found');
     }
     const safeUser = {
       id: user._id,
@@ -87,14 +89,14 @@ export const me = async (req, res) => {
       avatar: user.avatar,
       createdAt: user.createdAt
     };
-    res.json({ user: safeUser });
+    res.json({ success: true, message: 'User retrieved', errorCode: null, data: { user: safeUser } });
   } catch (err) {
     console.error("Me retrieval error:", err);
-    res.status(500).json({ error: 'Server error retrieving current user' });
+    throw new ApiError('Server error retrieving current user', 500, 'ERR_INTERNAL');
   }
-};
+});
 
-export const getTechnicians = async (req, res) => {
+export const getTechnicians = asyncHandler(async (req, res) => {
   try {
     const technicians = await User.find({ role: 'Technician' });
     const safeTechnicians = technicians.map(u => ({
@@ -108,6 +110,6 @@ export const getTechnicians = async (req, res) => {
     res.json({ technicians: safeTechnicians });
   } catch (err) {
     console.error("Get technicians error:", err);
-    res.status(500).json({ error: 'Server error retrieving technicians' });
+    throw new ApiError('Server error retrieving technicians', 500, 'ERR_INTERNAL');
   }
-};
+});

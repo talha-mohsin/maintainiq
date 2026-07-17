@@ -127,18 +127,35 @@ app.get('/api/technicians', authenticate, getTechnicians);
 // Global Error Handler
 // ============================================================
 // eslint-disable-next-line no-unused-vars
+// Global standardized error handler
 app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err.message);
-
-  // CORS error
-  if (err.message && err.message.startsWith('CORS policy:')) {
-    return res.status(403).json({ error: err.message });
+  // Log full error stack in development, concise in production
+  if (process.env.NODE_ENV !== 'production') {
+    console.error('[Error]', err);
+  } else {
+    console.error('[Error]', err.message);
   }
 
-  res.status(err.status || 500).json({
-    error: process.env.NODE_ENV === 'production'
-      ? 'Internal server error'
-      : err.message,
+  // Map known error types to status codes and messages
+  let status = err.statusCode || err.status || 500;
+  let message = err.message || 'Internal server error';
+
+  // Specific handling for known cases
+  if (err.name === 'ValidationError') status = 400;
+  if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') status = 401;
+  if (err.name && err.name.includes('CastError')) status = 400;
+  if (err.code === 11000) status = 409; // duplicate key
+
+  // Do not expose stack trace to client
+  const clientMessage = process.env.NODE_ENV === 'production'
+    ? message
+    : err.message;
+
+  res.status(status).json({
+    success: false,
+    message: clientMessage,
+    errorCode: err.errorCode || null,
+    data: null,
   });
 });
 

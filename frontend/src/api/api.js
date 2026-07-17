@@ -43,7 +43,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    return res.user;
+    return res.data.user;
   },
   
   logout: async () => {
@@ -52,7 +52,7 @@ export const api = {
   
   getMe: async () => {
     const res = await fetchJson(`${API_BASE}/auth/me`);
-    return res.user;
+    return res.data.user;
   },
 
   getTechnicians: async () => {
@@ -107,6 +107,7 @@ export const api = {
   },
 
   // Issues
+
   getIssues: async (filters = {}) => {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, val]) => {
@@ -139,6 +140,10 @@ export const api = {
       body: JSON.stringify(updates),
     });
     return res.issue;
+  },
+
+  deleteIssue: async (id) => {
+    await fetchJson(`${API_BASE}/issues/${id}`, { method: 'DELETE' });
   },
 
   resolveIssue: async (id, data) => {

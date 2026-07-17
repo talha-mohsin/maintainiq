@@ -46,7 +46,7 @@ export const getAssets = async (req, res) => {
 
     const assets = await Asset.find(query);
     await cacheService.set(cacheKey, assets, 300); // cache for 5 minutes
-    res.json({ assets });
+    res.json({ success: true, message: 'Assets retrieved', errorCode: null, data: { assets } });
   } catch (err) {
     console.error("getAssets error:", err);
     res.status(500).json({ error: 'Server error retrieving assets' });
@@ -109,10 +109,10 @@ export const getAssetPublic = async (req, res) => {
 
     const result = { asset: publicAsset, history: filteredHistory };
     await cacheService.set(cacheKey, result, 300); // cache for 5 minutes
-    res.json(result);
+    res.json({ success: true, message: 'Public asset retrieved', errorCode: null, data: result });
   } catch (err) {
     console.error("getAssetPublic error:", err);
-    res.status(500).json({ error: 'Server error retrieving public asset page' });
+    throw new ApiError('Server error retrieving public asset page', 500, 'ERR_INTERNAL');
   }
 };
 
@@ -120,13 +120,13 @@ export const createAsset = async (req, res) => {
   const { assetName, assetCode, category, location, condition, assignedTechnician, nextService } = req.body;
 
   if (!assetName || !assetCode || !category || !location) {
-    return res.status(400).json({ error: 'Missing required asset fields.' });
+    throw new ValidationError('Missing required asset fields.');
   }
 
   try {
     const existing = await Asset.findOne({ assetCode: { $regex: new RegExp(`^${assetCode}$`, 'i') } });
     if (existing) {
-      return res.status(400).json({ error: 'An asset with this code already exists.' });
+      throw new ValidationError('An asset with this code already exists.');
     }
 
     let techName = null;
@@ -192,7 +192,7 @@ export const createAsset = async (req, res) => {
     res.status(201).json({ asset: newAsset });
   } catch (err) {
     console.error("createAsset error:", err);
-    res.status(500).json({ error: 'Server error creating asset' });
+    throw new ApiError('Server error creating asset', 500, 'ERR_INTERNAL');
   }
 };
 
@@ -264,10 +264,10 @@ export const updateAsset = async (req, res) => {
     await cacheService.invalidatePattern('assets:');
     await cacheService.invalidatePattern('dashboard:');
 
-    res.json({ asset });
+    res.json({ success: true, message: 'Asset updated', errorCode: null, data: { asset } });
   } catch (err) {
     console.error("updateAsset error:", err);
-    res.status(500).json({ error: 'Server error updating asset' });
+    throw new ApiError('Server error updating asset', 500, 'ERR_INTERNAL');
   }
 };
 
@@ -286,10 +286,10 @@ export const deleteAsset = async (req, res) => {
     await cacheService.invalidatePattern('assets:');
     await cacheService.invalidatePattern('dashboard:');
 
-    res.json({ message: 'Asset successfully deleted.' });
+    res.json({ success: true, message: 'Asset successfully deleted.', errorCode: null, data: null });
   } catch (err) {
     console.error("deleteAsset error:", err);
-    res.status(500).json({ error: 'Server error deleting asset' });
+    throw new ApiError('Server error deleting asset', 500, 'ERR_INTERNAL');
   }
 };
 
@@ -307,10 +307,10 @@ export const getAssetHistory = async (req, res) => {
     }
     const history = await History.find({ assetId: req.params.id }).sort({ timestamp: -1 });
     await cacheService.set(cacheKey, history, 300); // cache for 5 minutes
-    res.json({ history });
+    res.json({ success: true, message: 'Asset history retrieved', errorCode: null, data: { history } });
   } catch (err) {
     console.error("getAssetHistory error:", err);
-    res.status(500).json({ error: 'Server error retrieving asset history' });
+    throw new ApiError('Server error retrieving asset history', 500, 'ERR_INTERNAL');
   }
 };
 
@@ -344,6 +344,6 @@ export const getAssetAIInsights = async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error("getAssetAIInsights error:", err);
-    res.status(500).json({ error: 'Server error generating AI insights' });
+    throw new ApiError('Server error generating AI insights', 500, 'ERR_INTERNAL');
   }
 };
