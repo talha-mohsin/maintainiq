@@ -1,6 +1,9 @@
 # ============================================================
-# MaintainIQ — Production Multi-Stage Dockerfile
-# Stage 1: Builder (installs all deps + compiles frontend & backend)
+# MaintainIQ — Backend API Production Dockerfile (npm workspaces)
+# Builds ONLY the backend workspace — the frontend is a static SPA
+# deployed independently (see .github/workflows/ci-cd.yml → S3/CloudFront,
+# or frontend/Dockerfile for a containerized static-serve alternative).
+# Stage 1: Builder (installs workspace deps + compiles backend)
 # Stage 2: Production (minimal runtime image — no devDeps, non-root)
 # ============================================================
 
@@ -12,17 +15,17 @@ WORKDIR /app
 # Install build tools needed for native modules
 RUN apk add --no-cache python3 make g++
 
-# Copy manifests first for optimal layer caching
+# Copy workspace manifests first for optimal layer caching
 COPY package.json package-lock.json ./
+COPY backend/package.json backend/package.json
+COPY frontend/package.json frontend/package.json
 
-# Install all dependencies (including devDeps needed for build)
+# Install all workspace dependencies (including devDeps needed for build)
 RUN npm ci --include=dev
 
-# Copy source code
-COPY . .
-
-# Build frontend (Vite → frontend/dist) and backend (esbuild → backend/dist)
-RUN npm run build
+# Copy backend source and build it (esbuild → backend/dist)
+COPY backend ./backend
+RUN npm run build --workspace=backend
 
 # ---- Stage 2: Production Runtime ----
 FROM node:22-alpine AS production
@@ -33,20 +36,16 @@ RUN addgroup -g 1001 -S nodejs && \
 
 WORKDIR /app
 
-# Copy package manifests
+# Copy workspace manifests
 COPY package.json package-lock.json ./
+COPY backend/package.json backend/package.json
+COPY frontend/package.json frontend/package.json
 
-# Install ONLY production dependencies
-RUN npm ci --omit=dev && npm cache clean --force
+# Install ONLY the backend workspace's production dependencies
+RUN npm ci --omit=dev --workspace=backend && npm cache clean --force
 
-# Copy compiled backend bundle from builder
+# Copy compiled backend bundle and runtime source from builder
 COPY --from=builder /app/backend/dist ./backend/dist
-
-# Copy compiled frontend static files from builder
-COPY --from=builder /app/frontend/dist ./frontend/dist
-
-# Copy backend source needed at runtime (non-compiled entrypoint, models, etc.)
-# The compiled server entry is backend/dist/server.js
 COPY --from=builder /app/backend/src ./backend/src
 COPY --from=builder /app/backend/server.js ./backend/server.js
 
@@ -54,6 +53,8 @@ COPY --from=builder /app/backend/server.js ./backend/server.js
 RUN chown -R nodeuser:nodejs /app
 
 USER nodeuser
+
+WORKDIR /app/backend
 
 # Expose application port
 EXPOSE 3000
@@ -67,4 +68,4 @@ ENV NODE_ENV=production
 ENV PORT=3000
 
 # Start compiled production server
-CMD ["node", "backend/dist/server.js"]
+CMD ["node", "dist/server.js"]

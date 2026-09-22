@@ -9,8 +9,31 @@ import Asset from '../models/Asset.js';
 import User from '../models/User.js';
 import Maintenance from '../models/Maintenance.js';
 import History from '../models/History.js';
+import { ValidationError, NotFoundError, ForbiddenError, ApiError } from '../utils/ApiError.js';
 import { cacheService } from '../config/cache.js';
 import { aiService } from '../services/ai.service.js';
+
+// Valid forward-progress transitions for the generic update endpoint.
+// "Resolved" is intentionally excluded — it may only be reached via
+// POST /:id/resolve, which enforces a mandatory maintenance note.
+// "Reopened" is intentionally excluded — it may only be reached via
+// POST /:id/reopen.
+const ALLOWED_STATUS_TRANSITIONS = {
+  Reported: ['Assigned'],
+  Assigned: ['Inspection Started', 'Waiting Parts', 'Reported'],
+  'Inspection Started': ['Maintenance', 'Waiting Parts'],
+  Maintenance: ['Waiting Parts'],
+  'Waiting Parts': ['Inspection Started', 'Maintenance'],
+  Reopened: ['Assigned', 'Inspection Started', 'Maintenance', 'Waiting Parts'],
+  Resolved: [],
+  Closed: [],
+};
+
+// Maps an issue status transition to the resulting asset status (Agent.md §5.1).
+const ASSET_STATUS_FOR_ISSUE_STATUS = {
+  'Inspection Started': 'Under Inspection',
+  'Maintenance': 'Under Maintenance',
+};
 
 // Set up Google Gen AI
 const ai = new GoogleGenAI({
@@ -139,6 +162,9 @@ export const createIssue = async (req, res) => {
   if (!asset) {
     throw new NotFoundError('Asset not found.');
   }
+  if (asset.status === 'Retired') {
+    throw new ValidationError('This asset has been retired and is no longer in active service.');
+  }
 
   // Determine next issue number
   const latestIssue = await Issue.find({}).sort({ createdAt: -1 }).limit(1);
@@ -174,16 +200,21 @@ export const createIssue = async (req, res) => {
 
   await newIssue.save();
 
-  // Auto-escalate asset status for high/critical priority
-  if (['High', 'Critical'].includes(defaultPriority)) {
-    const updatedStatus = defaultPriority === 'Critical' ? 'Out of Service' : 'Under Maintenance';
-    asset.status = updatedStatus;
+  // Update asset status per Agent.md §5.1: a new issue always moves the
+  // asset to "Issue Reported"; a Critical safety issue additionally takes
+  // it out of service immediately, regardless of current state.
+  const nextAssetStatus = defaultPriority === 'Critical'
+    ? 'Out of Service'
+    : (asset.status === 'Operational' ? 'Issue Reported' : null);
+
+  if (nextAssetStatus && nextAssetStatus !== asset.status) {
+    asset.status = nextAssetStatus;
     await asset.save();
 
     const historyAuto = new History({
       _id: `hst-${Date.now()}-auto`,
       assetId: asset._id,
-      action: `Status set to ${updatedStatus} (Auto-escalation)`,
+      action: `Status set to ${nextAssetStatus} (Auto-escalation)`,
       performedBy: 'System',
       timestamp: new Date()
     });
@@ -216,9 +247,28 @@ export const updateIssue = async (req, res) => {
   const { assignedTechnician, status, priority, title, description, category } = req.body;
 
   try {
-    const issue = await Issue.findById(req.params.id);
+    // req.issue is preloaded + ownership-checked by authorizeIssueAccess middleware
+    const issue = req.issue || await Issue.findById(req.params.id);
     if (!issue) {
       return res.status(404).json({ error: 'Issue not found.' });
+    }
+
+    if (issue.status === 'Closed') {
+      throw new ForbiddenError('A closed issue cannot be edited. Reopen it first.');
+    }
+
+    if (status && status !== issue.status) {
+      const allowedTargets = ALLOWED_STATUS_TRANSITIONS[issue.status] || [];
+      if (!allowedTargets.includes(status)) {
+        throw new ValidationError(
+          `Cannot move issue from "${issue.status}" to "${status}". ` +
+          (status === 'Resolved'
+            ? 'Use the resolve endpoint (requires inspection notes and a repair summary).'
+            : status === 'Reopened'
+              ? 'Use the reopen endpoint.'
+              : `Allowed next steps: ${allowedTargets.join(', ') || 'none'}.`)
+        );
+      }
     }
 
     let techName = null;
@@ -248,19 +298,20 @@ export const updateIssue = async (req, res) => {
 
     const performer = req.userName || 'Authorized User';
 
-    // Update asset status automatically based on progress
+    // Update asset status automatically based on progress (Agent.md §5.1)
     if (status && status !== oldStatus) {
-      if (status === 'Inspection Started' || status === 'Maintenance') {
+      const mappedAssetStatus = ASSET_STATUS_FOR_ISSUE_STATUS[status];
+      if (mappedAssetStatus) {
         const asset = await Asset.findById(issue.assetId);
         if (asset) {
-          asset.status = 'Under Maintenance';
+          asset.status = mappedAssetStatus;
           await asset.save();
         }
 
         const historyStatus = new History({
           _id: `hst-${Date.now()}-status`,
           assetId: issue.assetId,
-          action: `Status updated to Under Maintenance`,
+          action: `Status updated to ${mappedAssetStatus}`,
           performedBy: performer,
           timestamp: new Date()
         });
@@ -297,8 +348,9 @@ export const updateIssue = async (req, res) => {
 
     res.json({ issue });
   } catch (err) {
+    if (err instanceof ApiError) throw err;
     console.error("updateIssue error:", err);
-    res.status(500).json({ error: 'Server error updating issue logs' });
+    throw new ApiError('Server error updating issue logs', 500, 'ERR_INTERNAL');
   }
 };
 
@@ -309,9 +361,21 @@ export const resolveIssue = async (req, res) => {
     throw new ValidationError('Inspection notes and repair summary are required to resolve.');
   }
 
-  const issue = await Issue.findById(req.params.id);
+  if (cost !== undefined && cost !== null && cost !== '' && Number(cost) < 0) {
+    throw new ValidationError('Maintenance cost cannot be negative.');
+  }
+
+  // req.issue is preloaded + ownership-checked by authorizeIssueAccess middleware
+  const issue = req.issue || await Issue.findById(req.params.id);
   if (!issue) {
     throw new NotFoundError('Issue not found.');
+  }
+
+  if (issue.status === 'Closed') {
+    throw new ForbiddenError('A closed issue cannot be resolved. Reopen it first.');
+  }
+  if (issue.status === 'Resolved') {
+    throw new ValidationError('This issue has already been resolved.');
   }
 
   const completeDate = new Date();
@@ -414,6 +478,55 @@ export const deleteIssue = async (req, res) => {
     message: 'Issue deleted successfully.',
     errorCode: null,
     data: null
+  });
+};
+
+// Explicit Resolved/Closed -> Reopened flow (Agent.md §5.2). Admin-only:
+// reopening reverses a completed workflow and should not be self-served
+// by the technician who closed it.
+export const reopenIssue = async (req, res) => {
+  const issue = await Issue.findById(req.params.id);
+  if (!issue) {
+    throw new NotFoundError('Issue not found.');
+  }
+
+  if (!['Resolved', 'Closed'].includes(issue.status)) {
+    throw new ValidationError(`Only a Resolved or Closed issue can be reopened (current status: ${issue.status}).`);
+  }
+
+  issue.status = 'Reopened';
+  issue.completedDate = null;
+  await issue.save();
+
+  const performer = req.userName || 'Authorized User';
+
+  // Reflect the reopened work back onto the asset unless it already has
+  // other active issues driving a more specific status.
+  const asset = await Asset.findById(issue.assetId);
+  if (asset && asset.status === 'Operational') {
+    asset.status = 'Issue Reported';
+    await asset.save();
+  }
+
+  const historyReopen = new History({
+    _id: `hst-${Date.now()}-reopen`,
+    assetId: issue.assetId,
+    action: `Issue ${issue.issueNumber} reopened by ${performer}`,
+    performedBy: performer,
+    issueId: issue._id,
+    timestamp: new Date()
+  });
+  await historyReopen.save();
+
+  await cacheService.invalidatePattern('issues:');
+  await cacheService.invalidatePattern('dashboard:');
+  await cacheService.invalidatePattern('assets:');
+
+  res.json({
+    success: true,
+    message: 'Issue reopened successfully.',
+    errorCode: null,
+    data: { issue }
   });
 };
 

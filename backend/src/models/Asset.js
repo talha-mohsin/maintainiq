@@ -12,7 +12,11 @@ const assetSchema = new mongoose.Schema({
   category: { type: String, required: true },
   location: { type: String, required: true },
   condition: { type: String, required: true },
-  status: { type: String, enum: ['Operational', 'Under Maintenance', 'Out of Service'], default: 'Operational' },
+  status: {
+    type: String,
+    enum: ['Operational', 'Issue Reported', 'Under Inspection', 'Under Maintenance', 'Out of Service', 'Retired'],
+    default: 'Operational'
+  },
   assignedTechnician: { type: String, ref: 'User', default: null },
   assignedTechnicianName: { type: String, default: null },
   lastService: { type: String, default: '' },

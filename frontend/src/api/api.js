@@ -38,6 +38,14 @@ async function fetchJson(url, options = {}) {
 
 export const api = {
   // Authentication
+  register: async (name, email, password) => {
+    const res = await fetchJson(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      body: JSON.stringify({ name, email, password }),
+    });
+    return res.data.user;
+  },
+
   login: async (email, password) => {
     const res = await fetchJson(`${API_BASE}/auth/login`, {
       method: 'POST',
@@ -152,6 +160,13 @@ export const api = {
       body: JSON.stringify(data),
     });
     return res;
+  },
+
+  reopenIssue: async (id) => {
+    const res = await fetchJson(`${API_BASE}/issues/${id}/reopen`, {
+      method: 'POST',
+    });
+    return res.issue;
   },
 
   // Dashboard

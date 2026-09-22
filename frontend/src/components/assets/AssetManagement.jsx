@@ -51,10 +51,12 @@ export default function AssetManagement({ currentUser, onNavigateToPublicAsset }
         api.getAssets(filters),
         api.getTechnicians()
       ]);
-      setAssets(fetchedAssets);
-      setTechnicians(fetchedTechs);
+      setAssets(fetchedAssets || []);
+      setTechnicians(fetchedTechs || []);
     } catch (err) {
       console.error('Failed to load asset directory', err);
+      setAssets([]);
+      setTechnicians([]);
     } finally {
       setLoading(false);
     }
@@ -75,10 +77,11 @@ export default function AssetManagement({ currentUser, onNavigateToPublicAsset }
         api.getAssetHistory(asset.id),
         api.getAssetAIInsights(asset.id)
       ]);
-      setAssetHistory(history);
+      setAssetHistory(history || []);
       setAiInsights(insights);
     } catch (err) {
       console.error('Failed to load asset history or AI insights', err);
+      setAssetHistory([]);
     } finally {
       setLoadingHistory(false);
       setLoadingAiInsights(false);
@@ -210,8 +213,14 @@ export default function AssetManagement({ currentUser, onNavigateToPublicAsset }
     switch (status) {
       case 'Operational':
         return <CheckCircle2 size={16} className="text-emerald-500" />;
+      case 'Issue Reported':
+        return <AlertCircle size={16} className="text-orange-500" />;
+      case 'Under Inspection':
+        return <AlertTriangle size={16} className="text-sky-500" />;
       case 'Under Maintenance':
         return <AlertTriangle size={16} className="text-amber-500" />;
+      case 'Retired':
+        return <AlertCircle size={16} className="text-slate-400" />;
       default:
         return <AlertCircle size={16} className="text-rose-500" />;
     }
@@ -221,8 +230,14 @@ export default function AssetManagement({ currentUser, onNavigateToPublicAsset }
     switch (status) {
       case 'Operational':
         return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+      case 'Issue Reported':
+        return 'bg-orange-50 text-orange-700 border-orange-100';
+      case 'Under Inspection':
+        return 'bg-sky-50 text-sky-700 border-sky-100';
       case 'Under Maintenance':
         return 'bg-amber-50 text-amber-700 border-amber-100';
+      case 'Retired':
+        return 'bg-slate-100 text-slate-500 border-slate-200';
       default:
         return 'bg-rose-50 text-rose-700 border-rose-100';
     }
@@ -303,8 +318,11 @@ export default function AssetManagement({ currentUser, onNavigateToPublicAsset }
               >
                 <option value="">All Statuses</option>
                 <option value="Operational">Operational</option>
+                <option value="Issue Reported">Issue Reported</option>
+                <option value="Under Inspection">Under Inspection</option>
                 <option value="Under Maintenance">Under Maintenance</option>
                 <option value="Out of Service">Out of Service</option>
+                <option value="Retired">Retired</option>
               </select>
             </div>
           </div>
@@ -323,7 +341,7 @@ export default function AssetManagement({ currentUser, onNavigateToPublicAsset }
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {assets.map(asset => {
+                  {(assets || []).map(asset => {
                     const isSelected = selectedAsset?.id === asset.id;
                     return (
                       <tr
@@ -592,11 +610,11 @@ export default function AssetManagement({ currentUser, onNavigateToPublicAsset }
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-teal-500 mx-auto"></div>
                     <span className="text-[11px] text-slate-400 block mt-2 font-medium">Synchronizing log chain...</span>
                   </div>
-                ) : assetHistory.length === 0 ? (
+                ) : (assetHistory || []).length === 0 ? (
                   <p className="text-center text-xs text-slate-400 py-6">No diagnostic activities recorded.</p>
                 ) : (
                   <div className="relative pl-4 space-y-4 border-l border-slate-200 text-xs">
-                    {assetHistory.map((item, index) => (
+                    {(assetHistory || []).map((item, index) => (
                       <div key={item.id} className="relative space-y-1">
                         {/* Dot */}
                         <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-slate-400 ring-2 ring-slate-100" />
@@ -863,8 +881,11 @@ export default function AssetManagement({ currentUser, onNavigateToPublicAsset }
                     className="w-full rounded-lg border border-slate-200 py-2 px-3 text-sm outline-none focus:border-teal-500"
                   >
                     <option value="Operational">Operational</option>
+                    <option value="Issue Reported">Issue Reported</option>
+                    <option value="Under Inspection">Under Inspection</option>
                     <option value="Under Maintenance">Under Maintenance</option>
                     <option value="Out of Service">Out of Service</option>
+                    <option value="Retired">Retired</option>
                   </select>
                 </div>
 

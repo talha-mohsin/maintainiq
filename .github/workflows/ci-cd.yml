@@ -119,8 +119,8 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            echo "📥 Installing production dependencies..."
-            npm ci --omit=dev --include=dev
+            echo "📥 Installing workspace dependencies..."
+            npm ci --include=dev
 
             echo "🏗️ Building application..."
             npm run build
@@ -145,7 +145,7 @@ jobs:
             echo "🔙 Rolling back to previous commit..."
             cd /home/${{ secrets.EC2_USER }}/maintainiq
             git reset --hard HEAD~1
-            npm ci --omit=dev --include=dev
+            npm ci --include=dev
             npm run build
             pm2 reload ecosystem.config.cjs --update-env
             echo "⚠️ Rollback complete."

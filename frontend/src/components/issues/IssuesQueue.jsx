@@ -468,6 +468,19 @@ export default function IssuesQueue({ currentUser }) {
     }
   };
 
+  // Handle Reopen (Admin only — Resolved/Closed -> Reopened)
+  const handleReopenIssue = async () => {
+    if (!selectedIssue) return;
+    try {
+      const updated = await api.reopenIssue(selectedIssue.id);
+      setSelectedIssue(updated);
+      addToast('Issue reopened.', 'success');
+      loadData();
+    } catch (err) {
+      addToast(err.message || 'Failed to reopen issue.', 'error');
+    }
+  };
+
   // Delete Issue
   const handleDeleteIssue = async () => {
     if (!deleteTarget) return;
@@ -649,6 +662,7 @@ export default function IssuesQueue({ currentUser }) {
                 <option value="Waiting Parts">Waiting Parts</option>
                 <option value="Resolved">Resolved</option>
                 <option value="Closed">Closed</option>
+                <option value="Reopened">Reopened</option>
               </select>
               <select
                 id="filter-assigned"
@@ -1202,14 +1216,28 @@ export default function IssuesQueue({ currentUser }) {
               </div>
             )}
 
-            {/* Resolved State */}
-            {selectedIssue.status === 'Resolved' && (
-              <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/30 text-xs text-emerald-800 space-y-2">
+            {/* Resolved / Closed State */}
+            {['Resolved', 'Closed'].includes(selectedIssue.status) && (
+              <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/30 text-xs text-emerald-800 space-y-3">
                 <div className="flex items-center space-x-1.5 font-bold">
                   <CheckCircle size={15} className="text-emerald-600" />
-                  <span>Issue Resolved successfully</span>
+                  <span>Issue {selectedIssue.status} successfully</span>
                 </div>
-                <p className="leading-normal text-[11px] text-emerald-700">This repair ticket has been completed and archived. The corresponding asset has been successfully recommissioned back to Operational status in Excellent condition.</p>
+                <p className="leading-normal text-[11px] text-emerald-700">
+                  {selectedIssue.status === 'Resolved'
+                    ? 'This repair ticket has been completed and archived. The corresponding asset has been successfully recommissioned back to Operational status in Excellent condition.'
+                    : 'This ticket is closed and locked from further edits. Reopen it if the reported problem recurs.'}
+                </p>
+                {isAdmin && (
+                  <button
+                    id="reopen-issue-btn"
+                    onClick={handleReopenIssue}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 text-white font-semibold py-1.5 px-3 hover:bg-emerald-600 transition-colors text-[11px]"
+                  >
+                    <ListTodo size={12} />
+                    <span>Reopen Issue</span>
+                  </button>
+                )}
               </div>
             )}
 

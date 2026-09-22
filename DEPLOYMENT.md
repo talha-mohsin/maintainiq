@@ -83,8 +83,8 @@ git clone https://github.com/talha-mohsin/final-hackathon.git maintainiq
 cd maintainiq
 
 # Create .env file with production values
-cp .env.example .env
-nano .env   # Fill in all values
+cp backend/.env.example backend/.env
+nano backend/.env   # Fill in all values
 ```
 
 ---
@@ -124,10 +124,11 @@ sudo systemctl enable certbot.timer
 ## Step 3 — First Deployment
 
 ```bash
-# Install dependencies
+# Install workspace dependencies (backend + frontend)
 npm ci --include=dev
 
-# Build application
+# Build application (frontend/dist is deployed separately to S3 — see Step 4;
+# only backend/dist is actually run on this EC2 instance)
 npm run build
 
 # Start with PM2
@@ -215,15 +216,14 @@ After secrets are configured, every push to `main` will:
 ## Local Docker Development
 
 ```bash
-# Copy and fill environment
-cp .env.example .env
+# Copy and fill backend environment
+cp backend/.env.example backend/.env
 
-# Build and run all services (app + mongodb + redis)
+# Build and run all services (backend API + frontend SPA + mongodb + redis)
 docker compose up --build
 
-# Access at http://localhost:3000
-# Health: http://localhost:3000/health
-# API Docs: http://localhost:3000/api/docs
+# Backend API:  http://localhost:3000  (health: /health, docs: /api/docs)
+# Frontend SPA: http://localhost:5173
 ```
 
 ---

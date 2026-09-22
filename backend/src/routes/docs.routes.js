@@ -54,7 +54,7 @@ const openApiSpec = {
           category: { type: "string" },
           location: { type: "string" },
           condition: { type: "string", enum: ["Excellent", "Good", "Fair", "Poor"] },
-          status: { type: "string", enum: ["Operational", "Under Maintenance", "Out of Service"] },
+          status: { type: "string", enum: ["Operational", "Issue Reported", "Under Inspection", "Under Maintenance", "Out of Service", "Retired"] },
           assignedTechnician: { type: "string", nullable: true },
           assignedTechnicianName: { type: "string", nullable: true },
           lastService: { type: "string" },
@@ -76,7 +76,7 @@ const openApiSpec = {
           priority: { type: "string", enum: ["Low", "Medium", "High", "Critical"] },
           category: { type: "string" },
           reporter: { type: "string" },
-          status: { type: "string", enum: ["Reported", "Assigned", "Inspection Started", "Maintenance", "Resolved", "Closed"] },
+          status: { type: "string", enum: ["Reported", "Assigned", "Inspection Started", "Maintenance", "Waiting Parts", "Resolved", "Closed", "Reopened"] },
           aiGenerated: { type: "boolean" },
           possibleCauses: { type: "array", items: { type: "string" } },
           initialChecks: { type: "array", items: { type: "string" } },
@@ -91,7 +91,8 @@ const openApiSpec = {
   paths: {
     "/auth/register": {
       post: {
-        summary: "Register new administrator",
+        summary: "Public self-registration (always creates a Technician account)",
+        description: "Admin accounts cannot be self-registered — use POST /auth/users as an Admin to provision one.",
         tags: ["Authentication"],
         requestBody: {
           required: true,
@@ -103,15 +104,45 @@ const openApiSpec = {
                 properties: {
                   name: { type: "string" },
                   email: { type: "string" },
-                  password: { type: "string" }
+                  password: { type: "string", minLength: 6 }
                 }
               }
             }
           }
         },
         responses: {
-          201: { description: "Administrator successfully created and signed in." },
-          400: { description: "Email already registered or missing parameters." }
+          201: { description: "Account created and signed in (JWT cookie set)." },
+          409: { description: "Email already registered." },
+          400: { description: "Missing or invalid parameters." }
+        }
+      }
+    },
+    "/auth/users": {
+      post: {
+        summary: "Provision an Admin or Technician account (Admin only)",
+        tags: ["Authentication"],
+        security: [{ cookieAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["name", "email", "password", "role"],
+                properties: {
+                  name: { type: "string" },
+                  email: { type: "string" },
+                  password: { type: "string", minLength: 6 },
+                  role: { type: "string", enum: ["Admin", "Technician"] }
+                }
+              }
+            }
+          }
+        },
+        responses: {
+          201: { description: "Account created (no session issued for the caller)." },
+          403: { description: "Caller is not an Admin." },
+          409: { description: "Email already registered." }
         }
       }
     },
@@ -425,6 +456,18 @@ const openApiSpec = {
         },
         responses: {
           200: { description: "Maintenance log registered and issue resolved." }
+        }
+      }
+    },
+    "/issues/{id}/reopen": {
+      post: {
+        summary: "Reopen a Resolved or Closed issue (Admin only)",
+        tags: ["Issues"],
+        security: [{ cookieAuth: [] }],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          200: { description: "Issue moved back to Reopened status." },
+          400: { description: "Issue is not currently Resolved or Closed." }
         }
       }
     },

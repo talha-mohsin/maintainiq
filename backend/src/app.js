@@ -94,6 +94,7 @@ const uploadLimiter = rateLimit({
 
 // Apply rate limiters
 app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
 app.use('/api/upload', uploadLimiter);
 app.use('/api', apiLimiter);
 

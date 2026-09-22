@@ -1,27 +1,25 @@
 # MaintainIQ — Docker Compose (Local Development)
-# For production: use the Dockerfile directly on EC2 + PM2.
-# For local: docker compose up --build
+# Mirrors the decoupled production topology: backend API (EC2/PM2 equivalent)
+# + frontend static SPA (S3/CloudFront equivalent) + local Mongo/Redis.
+# Usage: docker compose up --build
 
 services:
-  # MaintainIQ Unified Full-Stack Application
-  app:
+  # Backend API (Express) — built from the backend workspace only
+  backend:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: maintainiq-app
+    container_name: maintainiq-backend
     ports:
       - "3000:3000"
+    env_file:
+      - ./backend/.env
     environment:
       - NODE_ENV=development
       - PORT=3000
       - MONGODB_URI=mongodb://mongodb:27017/maintainiq
       - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:-local-dev-jwt-secret-change-in-production}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME:-}
-      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY:-}
-      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET:-}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:3000}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173}
     depends_on:
       mongodb:
         condition: service_healthy
@@ -34,6 +32,20 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  # Frontend static SPA — served by Nginx, calls the backend container over HTTP
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3000/api
+    container_name: maintainiq-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
 
   # Local Redis Cache
   redis:

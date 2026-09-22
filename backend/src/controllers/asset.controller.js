@@ -8,6 +8,7 @@ import Asset from '../models/Asset.js';
 import User from '../models/User.js';
 import History from '../models/History.js';
 import Issue from '../models/Issue.js';
+import { ValidationError, ApiError } from '../utils/ApiError.js';
 import { cacheService } from '../config/cache.js';
 import { aiService } from '../services/ai.service.js';
 
@@ -46,7 +47,7 @@ export const getAssets = async (req, res) => {
 
     const assets = await Asset.find(query);
     await cacheService.set(cacheKey, assets, 300); // cache for 5 minutes
-    res.json({ success: true, message: 'Assets retrieved', errorCode: null, data: { assets } });
+    res.json({ assets });
   } catch (err) {
     console.error("getAssets error:", err);
     res.status(500).json({ error: 'Server error retrieving assets' });
@@ -191,6 +192,7 @@ export const createAsset = async (req, res) => {
 
     res.status(201).json({ asset: newAsset });
   } catch (err) {
+    if (err instanceof ApiError) throw err;
     console.error("createAsset error:", err);
     throw new ApiError('Server error creating asset', 500, 'ERR_INTERNAL');
   }
@@ -203,6 +205,12 @@ export const updateAsset = async (req, res) => {
     const asset = await Asset.findById(req.params.id);
     if (!asset) {
       return res.status(404).json({ error: 'Asset not found.' });
+    }
+
+    // Next service date cannot precede the last recorded maintenance completion (Agent.md §5.2)
+    const effectiveLastService = asset.lastService;
+    if (nextService && effectiveLastService && new Date(nextService) < new Date(effectiveLastService)) {
+      throw new ValidationError('Next service date cannot be before the last maintenance completion date.');
     }
 
     let techName = null;
@@ -266,6 +274,7 @@ export const updateAsset = async (req, res) => {
 
     res.json({ success: true, message: 'Asset updated', errorCode: null, data: { asset } });
   } catch (err) {
+    if (err instanceof ApiError) throw err;
     console.error("updateAsset error:", err);
     throw new ApiError('Server error updating asset', 500, 'ERR_INTERNAL');
   }
@@ -307,7 +316,7 @@ export const getAssetHistory = async (req, res) => {
     }
     const history = await History.find({ assetId: req.params.id }).sort({ timestamp: -1 });
     await cacheService.set(cacheKey, history, 300); // cache for 5 minutes
-    res.json({ success: true, message: 'Asset history retrieved', errorCode: null, data: { history } });
+    res.json({ history });
   } catch (err) {
     console.error("getAssetHistory error:", err);
     throw new ApiError('Server error retrieving asset history', 500, 'ERR_INTERNAL');

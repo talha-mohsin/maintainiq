@@ -10,7 +10,7 @@ import Dashboard from './components/Dashboard';
 import AssetManagement from './components/AssetManagement';
 import IssuesQueue from './components/IssuesQueue';
 import PublicAssetView from './components/PublicAssetView';
-import { ShieldCheck, LogIn, Key, Users, Info, Sparkles } from 'lucide-react';
+import { ShieldCheck, LogIn, Key, Users, Info, Sparkles, UserPlus } from 'lucide-react';
 
 export default function App() {
   // Authentication & Routing
@@ -28,7 +28,9 @@ export default function App() {
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
 
-  // Login Form States
+  // Login / Register Form States
+  const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -112,6 +114,40 @@ export default function App() {
     } finally {
       setLoginLoading(false);
     }
+  };
+
+  // Handle Register submit — always provisions a Technician account
+  // (Admin accounts must be created by an existing Admin, not self-service)
+  const handleRegisterSubmit = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+    if (!name || !email || !password) {
+      setLoginError('Please fill in name, email, and password.');
+      return;
+    }
+    if (password.length < 6) {
+      setLoginError('Password must be at least 6 characters.');
+      return;
+    }
+
+    setLoginLoading(true);
+    try {
+      const user = await api.register(name, email, password);
+      setCurrentUser(user);
+      setView('workspace');
+    } catch (err) {
+      setLoginError(err.message || 'Registration failed. Please try again.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const switchAuthMode = (mode) => {
+    setAuthMode(mode);
+    setLoginError('');
+    setName('');
+    setEmail('');
+    setPassword('');
   };
 
   // Quick fill demo credentials helper
@@ -240,15 +276,56 @@ export default function App() {
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-500 text-slate-950 font-display font-black text-2xl shadow-lg shadow-teal-500/20 mx-auto">
             M
           </div>
-          <h2 className="font-display font-bold text-2xl text-white tracking-tight mt-4">MaintainIQ Staff Entrance</h2>
-          <p className="text-slate-400 text-sm mt-1">Smart asset logs, automated dispatches & safety audits.</p>
+          <h2 className="font-display font-bold text-2xl text-white tracking-tight mt-4">
+            {authMode === 'login' ? 'MaintainIQ Staff Entrance' : 'Create Technician Account'}
+          </h2>
+          <p className="text-slate-400 text-sm mt-1">
+            {authMode === 'login'
+              ? 'Smart asset logs, automated dispatches & safety audits.'
+              : 'Self-service sign-up provisions a Technician account. Admin accounts are created by an existing Admin.'}
+          </p>
         </div>
 
-        {/* Login Form */}
-        <form onSubmit={handleLoginSubmit} className="space-y-4">
+        {/* Mode Toggle */}
+        <div className="flex rounded-xl bg-slate-950 border border-slate-800 p-1 text-xs font-semibold">
+          <button
+            id="auth-mode-login"
+            type="button"
+            onClick={() => switchAuthMode('login')}
+            className={`flex-1 py-2 rounded-lg transition-all ${authMode === 'login' ? 'bg-teal-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            Sign In
+          </button>
+          <button
+            id="auth-mode-register"
+            type="button"
+            onClick={() => switchAuthMode('register')}
+            className={`flex-1 py-2 rounded-lg transition-all ${authMode === 'register' ? 'bg-teal-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'}`}
+          >
+            Register
+          </button>
+        </div>
+
+        {/* Login / Register Form */}
+        <form onSubmit={authMode === 'login' ? handleLoginSubmit : handleRegisterSubmit} className="space-y-4">
           {loginError && (
             <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold leading-normal font-sans">
               {loginError}
+            </div>
+          )}
+
+          {authMode === 'register' && (
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">Full Name</label>
+              <input
+                id="register-name"
+                type="text"
+                required
+                placeholder="Jane Technician"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                className="w-full rounded-xl border border-slate-800 bg-slate-950 py-3 px-4 text-xs text-white outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-all font-sans"
+              />
             </div>
           )}
 
@@ -273,6 +350,7 @@ export default function App() {
               id="login-password"
               type="password"
               required
+              minLength={authMode === 'register' ? 6 : undefined}
               placeholder="••••••••"
               value={password}
               onChange={e => setPassword(e.target.value)}
@@ -286,12 +364,17 @@ export default function App() {
             disabled={loginLoading}
             className="w-full inline-flex items-center justify-center space-x-2 rounded-xl bg-teal-500 py-3.5 font-bold text-slate-950 hover:bg-teal-400 shadow-lg shadow-teal-500/10 transition-all text-sm mt-2"
           >
-            <LogIn size={16} />
-            <span>{loginLoading ? 'Authenticating credentials...' : 'Enter Workspace'}</span>
+            {authMode === 'login' ? <LogIn size={16} /> : <UserPlus size={16} />}
+            <span>
+              {loginLoading
+                ? (authMode === 'login' ? 'Authenticating credentials...' : 'Creating account...')
+                : (authMode === 'login' ? 'Enter Workspace' : 'Create Account & Enter Workspace')}
+            </span>
           </button>
         </form>
 
         {/* Demo Credentials Box */}
+        {authMode === 'login' && (
         <div className="p-4 bg-slate-950/60 rounded-2xl border border-slate-850 space-y-3 relative">
           <div className="flex items-center space-x-1.5 font-bold text-teal-400 text-[10px] uppercase tracking-wider font-mono">
             <Sparkles size={12} />
@@ -328,6 +411,7 @@ export default function App() {
             </button>
           </div>
         </div>
+        )}
 
       </div>
 

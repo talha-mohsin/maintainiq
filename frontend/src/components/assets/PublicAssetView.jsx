@@ -116,6 +116,8 @@ export default function PublicAssetView({ assetCode, onGoBackToLogin }) {
         return <CheckCircle2 size={18} className="text-emerald-500" />;
       case 'Under Maintenance':
         return <AlertTriangle size={18} className="text-amber-500" />;
+      case 'Retired':
+        return <AlertCircle size={18} className="text-slate-400" />;
       default:
         return <AlertCircle size={18} className="text-rose-500" />;
     }
@@ -127,10 +129,14 @@ export default function PublicAssetView({ assetCode, onGoBackToLogin }) {
         return 'bg-emerald-50 text-emerald-700 border-emerald-100';
       case 'Under Maintenance':
         return 'bg-amber-50 text-amber-700 border-amber-100';
+      case 'Retired':
+        return 'bg-slate-700/50 text-slate-300 border-slate-600';
       default:
         return 'bg-rose-50 text-rose-700 border-rose-100';
     }
   };
+
+  const isRetired = asset?.status === 'Retired';
 
   if (loading) {
     return (
@@ -254,7 +260,12 @@ export default function PublicAssetView({ assetCode, onGoBackToLogin }) {
           </div>
 
           {/* Urgent "Report Failure" Button */}
-          {!showReportForm && !submitSuccess && (
+          {isRetired ? (
+            <div className="flex items-center gap-2.5 rounded-xl bg-slate-800/60 border border-slate-700 py-3 px-4 text-slate-400 text-xs font-semibold">
+              <AlertCircle size={16} className="text-slate-500 shrink-0" />
+              <span>This asset has been retired and is no longer in active service. Issue reporting is disabled.</span>
+            </div>
+          ) : !showReportForm && !submitSuccess && (
             <button
               id="public-report-incident-btn"
               onClick={() => {

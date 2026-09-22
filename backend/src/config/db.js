@@ -83,6 +83,31 @@ function filterData(data, query) {
   });
 }
 
+// Wraps a plain in-memory record with a working .save() so controllers that
+// do `const doc = await Model.findById(id); doc.field = x; await doc.save();`
+// behave the same in fallback mode as they do against real Mongoose documents.
+function wrapInMemoryDoc(modelName, data) {
+  if (!data) return null;
+  const doc = { ...data };
+  Object.defineProperty(doc, 'save', {
+    enumerable: false,
+    value: async function save() {
+      const store = memoryStore[modelName];
+      if (!store) return doc;
+      const index = store.findIndex(item => String(item._id) === String(doc._id));
+      const plain = { ...doc };
+      delete plain.save;
+      if (index >= 0) {
+        store[index] = plain;
+      } else {
+        store.push(plain);
+      }
+      return doc;
+    }
+  });
+  return doc;
+}
+
 // Chainable query helper mimicking Mongoose promise queries
 class InMemoryQuery {
   constructor(data) {
@@ -171,7 +196,7 @@ mongoose.Model.findOne = function(query, ...args) {
     const modelName = this.modelName;
     const store = memoryStore[modelName] || [];
     const filtered = filterData(store, query);
-    const result = filtered[0] || null;
+    const result = wrapInMemoryDoc(modelName, filtered[0] || null);
     return {
       then(onFulfilled, onRejected) {
         return Promise.resolve(result).then(onFulfilled, onRejected);
@@ -187,7 +212,7 @@ mongoose.Model.findById = function(id, ...args) {
   if (mongoose.connection.readyState !== 1) {
     const modelName = this.modelName;
     const store = memoryStore[modelName] || [];
-    const result = store.find(item => String(item._id) === String(id)) || null;
+    const result = wrapInMemoryDoc(modelName, store.find(item => String(item._id) === String(id)) || null);
     return {
       then(onFulfilled, onRejected) {
         return Promise.resolve(result).then(onFulfilled, onRejected);
