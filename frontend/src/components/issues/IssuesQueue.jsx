@@ -10,6 +10,7 @@ import {
   Trash2, Edit, AlertCircle
 } from 'lucide-react';
 import { api } from '../../api/api';
+import { getSocket } from '../../lib/socket';
 
 /* ─── tiny inline Toast ─────────────────────────────────────────── */
 function Toast({ toasts, removeToast }) {
@@ -419,6 +420,18 @@ export default function IssuesQueue({ currentUser }) {
   useEffect(() => {
     loadData();
   }, [search, priorityFilter, statusFilter, assignedFilter]);
+
+  // Real-time: refresh the queue whenever any issue is created/updated/resolved/
+  // reopened/deleted elsewhere (e.g. another technician's session).
+  useEffect(() => {
+    const socket = getSocket();
+    const events = ['issue:created', 'issue:updated', 'issue:resolved', 'issue:reopened', 'issue:deleted'];
+    const handleIssueEvent = () => loadData();
+    events.forEach(evt => socket.on(evt, handleIssueEvent));
+    return () => {
+      events.forEach(evt => socket.off(evt, handleIssueEvent));
+    };
+  }, [loadData]);
 
   useEffect(() => {
     if (!selectedIssue) {

@@ -12,6 +12,8 @@ import History from '../models/History.js';
 import { ValidationError, NotFoundError, ForbiddenError, ApiError } from '../utils/ApiError.js';
 import { cacheService } from '../config/cache.js';
 import { aiService } from '../services/ai.service.js';
+import { emailService } from '../services/email.service.js';
+import { emitEvent } from '../socket.js';
 
 // Valid forward-progress transitions for the generic update endpoint.
 // "Resolved" is intentionally excluded — it may only be reached via
@@ -235,6 +237,9 @@ export const createIssue = async (req, res) => {
   await cacheService.invalidatePattern('dashboard:');
   await cacheService.invalidatePattern('assets:');
 
+  emitEvent('issue:created', { issue: newIssue });
+  emitEvent('dashboard:update', { reason: 'issue:created' });
+
   res.status(201).json({
     success: true,
     message: 'Issue created successfully.',
@@ -340,11 +345,25 @@ export const updateIssue = async (req, res) => {
         timestamp: new Date()
       });
       await historyAssign.save();
+
+      // Notify the newly assigned technician by email — fire-and-forget so a
+      // slow/broken mail server never blocks the API response.
+      if (assignedTechnician && tech?.email) {
+        emailService.sendIssueAssignmentEmail({
+          to: tech.email,
+          technicianName: techName,
+          issue,
+          assetName: issue.assetName,
+        }).catch(err => console.warn('Assignment email dispatch failed:', err.message));
+      }
     }
 
     await cacheService.invalidatePattern('issues:');
     await cacheService.invalidatePattern('dashboard:');
     await cacheService.invalidatePattern('assets:');
+
+    emitEvent('issue:updated', { issue });
+    emitEvent('dashboard:update', { reason: 'issue:updated' });
 
     res.json({ issue });
   } catch (err) {
@@ -442,6 +461,9 @@ export const resolveIssue = async (req, res) => {
   await cacheService.invalidatePattern('dashboard:');
   await cacheService.invalidatePattern('assets:');
 
+  emitEvent('issue:resolved', { issue, maintenance: newMaint });
+  emitEvent('dashboard:update', { reason: 'issue:resolved' });
+
   res.json({
     success: true,
     message: 'Issue resolved successfully.',
@@ -472,6 +494,9 @@ export const deleteIssue = async (req, res) => {
 
   await cacheService.invalidatePattern('issues:');
   await cacheService.invalidatePattern('dashboard:');
+
+  emitEvent('issue:deleted', { id: req.params.id });
+  emitEvent('dashboard:update', { reason: 'issue:deleted' });
 
   res.json({
     success: true,
@@ -521,6 +546,9 @@ export const reopenIssue = async (req, res) => {
   await cacheService.invalidatePattern('issues:');
   await cacheService.invalidatePattern('dashboard:');
   await cacheService.invalidatePattern('assets:');
+
+  emitEvent('issue:reopened', { issue });
+  emitEvent('dashboard:update', { reason: 'issue:reopened' });
 
   res.json({
     success: true,

@@ -29,6 +29,9 @@ The backend is **API-only** — it does not serve the frontend. In production th
 | Auth | JWT (httpOnly cookie), bcrypt password hashing, Admin/Technician roles |
 | AI | Google Gemini (`@google/genai`) — structured JSON issue triage, maintenance summaries, health scoring |
 | Media | Cloudinary (evidence photo uploads) |
+| Realtime | Socket.IO — live dashboard/issue-queue updates on create/assign/resolve/reopen/delete |
+| Email | Nodemailer (SMTP) — technician notification on issue assignment; logs to console if SMTP is unconfigured |
+| Testing | Jest + Supertest — API tests run against the in-memory DB fallback, no external services required |
 | Deploy | Docker, GitHub Actions CI/CD, AWS EC2 + PM2 (backend), S3 + CloudFront (frontend) |
 
 ---
@@ -49,6 +52,14 @@ cp frontend/.env.example frontend/.env    # set VITE_API_URL for your backend
 npm run dev             # backend  → http://localhost:3000
 npm run dev:frontend    # frontend → http://localhost:5173 (proxies to VITE_API_URL)
 ```
+
+### Tests
+
+```bash
+npm test        # runs the backend Jest/Supertest suite (backend/tests/)
+```
+
+Tests run against the backend's built-in in-memory DB/cache fallback (`backend/src/config/db.js`, `backend/src/config/cache.js`) — no MongoDB, Redis, or `GEMINI_API_KEY` required. They cover the core issue-reporting flow (`POST /api/issues`, asset-status escalation, validation) and the AI triage endpoint (`POST /api/issues/triage`, including its deterministic fallback response when no Gemini key is configured).
 
 ### Production build
 
@@ -102,6 +113,80 @@ Seeded automatically on first backend startup (see `backend/src/config/db.js`).
 
 ---
 
+## Data Model
+
+```mermaid
+erDiagram
+    USER ||--o{ ASSET : "assigned to"
+    USER ||--o{ ISSUE : "assigned to"
+    ASSET ||--o{ ISSUE : "has"
+    ASSET ||--o{ HISTORY : "logs"
+    ISSUE ||--o| MAINTENANCE : "resolved by"
+    ISSUE ||--o{ HISTORY : "logs"
+
+    USER {
+        string _id PK
+        string name
+        string email UK
+        string password
+        string role "Admin | Technician"
+        string avatar
+        date createdAt
+    }
+    ASSET {
+        string _id PK
+        string assetName
+        string assetCode UK
+        string category
+        string location
+        string condition
+        string status "Operational | Issue Reported | Under Inspection | Under Maintenance | Out of Service | Retired"
+        string assignedTechnician FK
+        string qrCode
+        string publicURL
+        string lastService
+        string nextService
+        string createdBy FK
+        date createdAt
+    }
+    ISSUE {
+        string _id PK
+        string issueNumber UK
+        string assetId FK
+        string title
+        string description
+        string priority "Low | Medium | High | Critical"
+        string category
+        string reporter
+        string status "Reported | Assigned | Inspection Started | Maintenance | Waiting Parts | Resolved | Closed | Reopened"
+        boolean aiGenerated
+        string assignedTechnician FK
+        date createdAt
+        date completedDate
+    }
+    MAINTENANCE {
+        string _id PK
+        string issueId FK
+        string assetId FK
+        string inspectionNotes
+        string_array parts
+        number cost
+        string evidence
+        date completedDate
+        string summary
+    }
+    HISTORY {
+        string _id PK
+        string assetId FK
+        string issueId FK
+        string action
+        string performedBy
+        date timestamp
+    }
+```
+
+---
+
 ## API Documentation
 
 Interactive Swagger UI is served at:
@@ -143,4 +228,6 @@ GET /api/docs
 
 ## Deployment
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for the full AWS EC2 + S3/CloudFront runbook, and `.github/workflows/ci-cd.yml` for the automated pipeline (CI → Docker validate → deploy backend to EC2 + deploy frontend to S3/CloudFront).
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the full AWS EC2 + S3/CloudFront runbook, and `.github/workflows/ci-cd.yml` for the automated pipeline (CI → lint → test → Docker validate → deploy backend to EC2 + deploy frontend to S3/CloudFront).
+
+The CD stage genuinely deploys end-to-end on every push to `main`: `deploy-backend` SSHes into EC2, pulls `main`, rebuilds, reloads PM2, curls `/health` to confirm the new process is live, and auto-rolls back on failure; `deploy-frontend` rebuilds with the production API URL, syncs `frontend/dist/` to S3, and invalidates CloudFront. It requires these repository secrets to be configured to actually run (the jobs are `if: github.ref == 'refs/heads/main'` and will simply not fire without them): `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_BUCKET_NAME`, `CLOUDFRONT_DISTRIBUTION_ID`, `APP_URL`.

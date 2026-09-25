@@ -1,6 +1,6 @@
 # MaintainIQ CI/CD Pipeline
 # ============================================================
-# CI  — runs on every push/PR: install → lint → build → audit → docker
+# CI  — runs on every push/PR: install → lint → test → build → audit → docker
 # CD  — runs on push to main after CI passes: deploy to AWS EC2 + S3
 # ============================================================
 
@@ -44,6 +44,9 @@ jobs:
 
       - name: Run Lint Checks
         run: npm run lint
+
+      - name: Run Backend Tests
+        run: npm test
 
       - name: Build Frontend & Backend
         run: npm run build

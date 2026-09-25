@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { api } from './lib/api';
+import { connectSocket, disconnectSocket } from './lib/socket';
 import Navigation from './components/Navigation';
 import Dashboard from './components/Dashboard';
 import AssetManagement from './components/AssetManagement';
@@ -94,6 +95,20 @@ export default function App() {
   useEffect(() => {
     loadDashboardStats();
   }, [view, activeTab, currentUser]);
+
+  // Real-time: live dashboard refresh on issue create/update/resolve/reopen/delete
+  useEffect(() => {
+    if (view !== 'workspace' || !currentUser) return;
+
+    const socket = connectSocket();
+    const handleDashboardUpdate = () => loadDashboardStats();
+    socket.on('dashboard:update', handleDashboardUpdate);
+
+    return () => {
+      socket.off('dashboard:update', handleDashboardUpdate);
+      disconnectSocket();
+    };
+  }, [view, currentUser]);
 
   // Handle Login submit
   const handleLoginSubmit = async (e) => {
